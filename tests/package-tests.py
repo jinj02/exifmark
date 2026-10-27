@@ -31,7 +31,11 @@ with tempfile.TemporaryDirectory(prefix='exify-install-') as folder:
     path = directory/'request.json'; path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert Image.open(directory/'result.jpg').size == (480,368)
+    assert Image.open(directory/'result.jpg').size == (500,368)
+    request['layout'] = 'bottomOnly'; path.write_text(json.dumps(request))
+    result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert Image.open(directory/'result.jpg').size == (480,358)
     shutil.rmtree(binary.parent/'ExifyRenderer_ExifyCore.bundle')
     request['output'] = str(directory/'missing-logo.jpg'); path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)

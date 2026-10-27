@@ -96,19 +96,24 @@ final class CardRendererTests {
     }
 
     func testDimensionsAcrossAspectRatiosAndThemes() throws {
-        for (width, height) in [(1200, 800), (800, 1200), (1600, 400), (320, 240), (17, 11)] {
+        for (width, height) in [(1200, 800), (800, 1200), (1600, 400), (320, 240), (667, 1000), (17, 11)] {
             let input = try fixture(width: width, height: height)
             for theme in [Theme.white, .black] {
-                let output = directory.appendingPathComponent("\(width)-\(theme.rawValue).jpg")
-                let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path, theme: theme,
-                    camera: "ILCE-7M4", lens: String(repeating: "超长镜头 FE 24-70mm F2.8 GM II · ", count: 12),
-                    exposure: "f/2.8 · 1/8000s · ISO 102400", capturedAt: "2026.10.27 09:41"))
-                let actual = try properties(output)
-                let expectedHeight = height + Int((Double(width) * 0.1).rounded())
-                equal(result.width, width)
-                equal(result.height, expectedHeight)
-                equal(actual[kCGImagePropertyPixelWidth as String] as? Int, width)
-                equal(actual[kCGImagePropertyPixelHeight as String] as? Int, expectedHeight)
+                for layout in [Layout.bordered, .bottomOnly] {
+                    let output = directory.appendingPathComponent("\(width)-\(theme.rawValue)-\(layout.rawValue).jpg")
+                    let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path,
+                        theme: theme, layout: layout,
+                        camera: "ILCE-7M4", lens: String(repeating: "超长镜头 FE 24-70mm F2.8 GM II · ", count: 12),
+                        exposure: "f/2.8 · 1/8000s · ISO 102400", capturedAt: "2026.10.27 09:41"))
+                    let actual = try properties(output)
+                    let border = layout == .bordered ? Int((Double(width) * 0.02).rounded()) : 0
+                    let footer = Int((Double(width) * 0.08).rounded())
+                    equal(result.width, width + border * 2)
+                    equal(result.height, height + border + footer)
+                    equal(result.footerHeight, footer)
+                    equal(actual[kCGImagePropertyPixelWidth as String] as? Int, result.width)
+                    equal(actual[kCGImagePropertyPixelHeight as String] as? Int, result.height)
+                }
             }
         }
     }
@@ -116,15 +121,18 @@ final class CardRendererTests {
     func testAllEightOrientationsAreNormalized() throws {
         for orientation in 1...8 {
             let input = try fixture(orientation: orientation)
-            let output = directory.appendingPathComponent("orientation-\(orientation).jpg")
-            let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path))
-            equal(result.width, orientation >= 5 ? 240 : 320)
-            equal(result.height, orientation >= 5 ? 344 : 272)
-            let actual = try properties(output)
-            equal(actual[kCGImagePropertyOrientation as String] as? Int ?? 1, 1)
-            let exif = actual[kCGImagePropertyExifDictionary as String] as? [String: Any]
-            equal(exif?[kCGImagePropertyExifPixelXDimension as String] as? Int, result.width)
-            equal(exif?[kCGImagePropertyExifPixelYDimension as String] as? Int, result.height)
+            for layout in [Layout.bordered, .bottomOnly] {
+                let output = directory.appendingPathComponent("orientation-\(orientation)-\(layout.rawValue).jpg")
+                let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path, layout: layout))
+                let bordered = layout == .bordered
+                equal(result.width, orientation >= 5 ? (bordered ? 250 : 240) : (bordered ? 332 : 320))
+                equal(result.height, orientation >= 5 ? (bordered ? 344 : 339) : (bordered ? 272 : 266))
+                let actual = try properties(output)
+                equal(actual[kCGImagePropertyOrientation as String] as? Int ?? 1, 1)
+                let exif = actual[kCGImagePropertyExifDictionary as String] as? [String: Any]
+                equal(exif?[kCGImagePropertyExifPixelXDimension as String] as? Int, result.width)
+                equal(exif?[kCGImagePropertyExifPixelYDimension as String] as? Int, result.height)
+            }
         }
     }
 

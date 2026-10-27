@@ -1,7 +1,7 @@
 local Settings = {}
 
 Settings.observedKeys = {
-    'LR_format', 'LR_enableHDRDisplay', 'LR_jpeg_useLimitSize', 'exify_theme',
+    'LR_format', 'LR_enableHDRDisplay', 'LR_jpeg_useLimitSize', 'exify_theme', 'exify_layout',
 }
 
 function Settings.error(properties, isMac, rendererExists)
@@ -12,6 +12,10 @@ function Settings.error(properties, isMac, rendererExists)
     if properties.LR_jpeg_useLimitSize then return 'exify需要追加信息带，请关闭JPEG的“限制文件大小”。' end
     if properties.exify_theme ~= 'white' and properties.exify_theme ~= 'black' then
         return '请选择白色或黑色背景。'
+    end
+    if properties.exify_layout ~= nil and properties.exify_layout ~= 'bordered'
+        and properties.exify_layout ~= 'bottomOnly' then
+        return '请选择三边2%留白或仅底部8%的布局。'
     end
 end
 

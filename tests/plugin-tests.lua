@@ -36,7 +36,8 @@ local valid = { LR_format = 'JPEG', exify_theme = 'white', LR_jpeg_quality = 0.9
 equal(Settings.error(valid, true, true), nil)
 equal(Settings.error(valid, false, true) ~= nil, true)
 equal(Settings.error(valid, true, false) ~= nil, true)
-for key, value in pairs({LR_format='TIFF', LR_enableHDRDisplay=true, LR_jpeg_useLimitSize=true, exify_theme='invalid'}) do
+for key, value in pairs({LR_format='TIFF', LR_enableHDRDisplay=true, LR_jpeg_useLimitSize=true,
+    exify_theme='invalid', exify_layout='invalid'}) do
     local p = {}; for k,v in pairs(valid) do p[k] = v end; p[key] = value
     equal(Settings.error(p, true, true) ~= nil, true)
 end
@@ -93,11 +94,23 @@ _G._PLUGIN, _G.MAC_ENV = {path=root .. '/exify.lrplugin'}, true
 local Filter = require 'ExportFilter'
 equal(Filter.exportPresetFields[1].key, 'exify_theme')
 equal(Filter.exportPresetFields[1].default, 'white')
+equal(Filter.exportPresetFields[2].key, 'exify_layout')
+equal(Filter.exportPresetFields[2].default, 'bordered')
 local props = {LR_format='JPEG', LR_jpeg_quality=0.9, callbacks={}}
 function props:addObserver(key,owner,callback) self.callbacks[key]=callback end
 function props:removeObserver(key) self.callbacks[key]=nil end
 Filter.startDialog(props)
 equal(props.exify_theme,'white'); equal(props.LR_cantExportBecause,nil)
+equal(props.exify_layout,'bordered')
+equal(props.exify_status:find('各留白2%',1,true) ~= nil,true)
+props.exify_layout='bottomOnly'; props.callbacks.exify_layout()
+equal(props.LR_cantExportBecause,nil)
+equal(props.exify_status:find('底部追加8%',1,true) ~= nil,true)
+equal(props.exify_status:find('各留白2%',1,true),nil)
+props.exify_layout='invalid'; props.callbacks.exify_layout()
+equal(props.LR_cantExportBecause ~= nil,true)
+props.exify_layout='bordered'; props.callbacks.exify_layout()
+equal(props.LR_cantExportBecause,nil)
 props.LR_enableHDRDisplay=true; props.callbacks.LR_enableHDRDisplay()
 equal(props.LR_cantExportBecause ~= nil,true)
 props.LR_enableHDRDisplay=false; props.callbacks.LR_enableHDRDisplay()
@@ -116,7 +129,9 @@ local function runExport(options)
         destinations[i] = {photo=photo, destinationPath=scratch .. '/out-' .. i .. '.jpg',
             renditionIsDone=function(self,ok,message) self.ok=ok; self.message=message; self.calls=(self.calls or 0)+1 end}
     end
-    local context = {propertyTable=valid, renditionsToSatisfy=destinations}
+    local exportProperties = {}; for key,value in pairs(valid) do exportProperties[key]=value end
+    exportProperties.exify_layout = options.layout
+    local context = {propertyTable=exportProperties, renditionsToSatisfy=destinations}
     function context:renditions(renditionOptions)
         local i=0
         return function()
@@ -143,6 +158,10 @@ local destinations=runExport()
 for _,d in ipairs(destinations) do equal(d.ok,true) end
 equal(executionCount,3)
 equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
+equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
+destinations=runExport({layout='bottomOnly'})
+for _,d in ipairs(destinations) do equal(d.ok,true) end
+equal(requestPayload:find('"layout":"bottomOnly"',1,true) ~= nil,true)
 destinations=runExport({upstreamFailure=true})
 equal(destinations[1].ok,true); equal(destinations[2].ok,false); equal(destinations[3].ok,true); equal(executionCount,2)
 destinations=runExport({fail=true})

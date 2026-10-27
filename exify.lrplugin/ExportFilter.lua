@@ -19,7 +19,9 @@ end
 
 local function updateStatus(properties)
     local reason = compatibilityError(properties)
-    properties.exify_status = reason or '仅追加底部信息带；照片尺寸保持不变。'
+    properties.exify_status = reason or (properties.exify_layout == 'bottomOnly'
+        and '底部追加8%参数栏，比例按照片宽度计算。照片区域尺寸保持不变。'
+        or '上、左、右各留白2%，底部追加8%参数栏，比例按照片宽度计算。照片区域尺寸保持不变。')
     -- Do not overwrite a validation error owned by another export provider.
     local previous = dialogObservers[properties]
     if reason and (properties.LR_cantExportBecause == nil or properties.LR_cantExportBecause == previous) then
@@ -32,6 +34,7 @@ end
 
 function Filter.startDialog(properties)
     if properties.exify_theme == nil then properties.exify_theme = 'white' end
+    if properties.exify_layout == nil then properties.exify_layout = 'bordered' end
     for _, key in ipairs(Settings.observedKeys) do
         properties:addObserver(key, Filter, function() updateStatus(properties) end)
     end
@@ -57,6 +60,17 @@ function Filter.sectionForFilterInDialog(f, properties)
                 value = LrView.bind 'exify_theme',
                 items = { { title = '白色', value = 'white' }, { title = '黑色', value = 'black' } },
                 width_in_chars = 12,
+            },
+        },
+        f:row {
+            f:static_text { title = '边框布局：' },
+            f:popup_menu {
+                value = LrView.bind 'exify_layout',
+                items = {
+                    { title = '三边2%留白＋底部8%参数栏', value = 'bordered' },
+                    { title = '仅底部8%参数栏', value = 'bottomOnly' },
+                },
+                width_in_chars = 30,
             },
         },
         f:static_text {
@@ -134,6 +148,7 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                 input = sourcePath,
                 output = destination.destinationPath,
                 theme = properties.exify_theme,
+                layout = properties.exify_layout or 'bordered',
                 camera = fields.camera, lens = fields.lens,
                 exposure = fields.exposure, capturedAt = fields.capturedAt,
                 quality = properties.LR_jpeg_quality or 0.9,
@@ -154,5 +169,8 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
     end
 end
 
-Filter.exportPresetFields = { { key = 'exify_theme', default = 'white' } }
+Filter.exportPresetFields = {
+    { key = 'exify_theme', default = 'white' },
+    { key = 'exify_layout', default = 'bordered' },
+}
 return Filter

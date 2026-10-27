@@ -27,10 +27,13 @@ public struct CardRenderer {
         var properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
         let orientation = (properties[kCGImagePropertyOrientation as String] as? NSNumber)?.intValue ?? 1
         let swap = (5...8).contains(orientation)
-        let width = swap ? image.height : image.width
+        let photoWidth = swap ? image.height : image.width
         let photoHeight = swap ? image.width : image.height
-        let footerHeight = Int((Double(width) * 0.10).rounded())
-        let height = photoHeight + footerHeight
+        // Use the oriented photo width for both layouts, including portrait images.
+        let border = request.layout == .bordered ? Int((Double(photoWidth) * 0.02).rounded()) : 0
+        let footerHeight = Int((Double(photoWidth) * 0.08).rounded())
+        let width = photoWidth + border * 2
+        let height = photoHeight + border + footerHeight
         guard width > 0, photoHeight > 0, width <= 65535, height <= 65535,
               Double(width) * Double(height) <= 200_000_000 else {
             throw RenderError.invalid("画布超出JPEG尺寸或内存限制，请缩小照片后导出。")
@@ -48,12 +51,15 @@ public struct CardRenderer {
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.interpolationQuality = .none
         context.saveGState()
-        context.translateBy(x: 0, y: CGFloat(footerHeight))
+        context.translateBy(x: CGFloat(border), y: CGFloat(footerHeight))
         context.concatenate(Self.orientationTransform(orientation, width: image.width, height: image.height))
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         context.restoreGState()
         if footerHeight > 0 {
-            try drawFooter(in: context, width: CGFloat(width), height: CGFloat(footerHeight), request: request)
+            context.saveGState()
+            context.translateBy(x: CGFloat(border), y: 0)
+            try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request)
+            context.restoreGState()
         }
         guard let card = context.makeImage() else { throw RenderError.allocation }
 
@@ -96,8 +102,9 @@ public struct CardRenderer {
     private func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest) throws {
         let primary: CGFloat = request.theme == .white ? 0.075 : 0.97
         let secondary: CGFloat = request.theme == .white ? 0.46 : 0.65
-        let left = CGRect(x: width * 0.04, y: 0, width: width * 0.475, height: height)
-        let right = CGRect(x: width * 0.735, y: 0, width: width * 0.225, height: height)
+        let sideInset = width * 0.01
+        let left = CGRect(x: sideInset, y: 0, width: width * 0.475, height: height)
+        let right = CGRect(x: width - sideInset - width * 0.225, y: 0, width: width * 0.225, height: height)
         drawText(request.camera, in: context, frame: left, centerY: height * 0.66,
                  size: width * 0.020, weight: .emphasizedSystem, gray: primary, rightAligned: false)
         drawText(request.lens, in: context, frame: left, centerY: height * 0.34,

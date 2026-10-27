@@ -4,29 +4,53 @@ public enum Theme: String, Codable {
     case white, black
 }
 
+public enum Layout: String, Codable {
+    case bordered, bottomOnly
+}
+
 public struct RenderRequest: Codable {
     public var version: Int
     public var input: String
     public var output: String
     public var theme: Theme
+    public var layout: Layout
     public var camera: String
     public var lens: String
     public var exposure: String
     public var capturedAt: String
     public var quality: Double
 
-    public init(input: String, output: String, theme: Theme = .white,
+    public init(input: String, output: String, theme: Theme = .white, layout: Layout = .bordered,
                 camera: String = "", lens: String = "", exposure: String = "",
                 capturedAt: String = "", quality: Double = 0.9) {
         self.version = 1
         self.input = input
         self.output = output
         self.theme = theme
+        self.layout = layout
         self.camera = camera
         self.lens = lens
         self.exposure = exposure
         self.capturedAt = capturedAt
         self.quality = quality
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, input, output, theme, layout, camera, lens, exposure, capturedAt, quality
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        input = try values.decode(String.self, forKey: .input)
+        output = try values.decode(String.self, forKey: .output)
+        theme = try values.decode(Theme.self, forKey: .theme)
+        layout = try values.decodeIfPresent(Layout.self, forKey: .layout) ?? .bordered
+        camera = try values.decode(String.self, forKey: .camera)
+        lens = try values.decode(String.self, forKey: .lens)
+        exposure = try values.decode(String.self, forKey: .exposure)
+        capturedAt = try values.decode(String.self, forKey: .capturedAt)
+        quality = try values.decode(Double.self, forKey: .quality)
     }
 
     public func validate() throws {

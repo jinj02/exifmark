@@ -18,20 +18,21 @@ def check(value, message):
     assert value, message
 
 
-def render(directory, source, output, theme='white', quality=0.95, **fields):
+def render(directory, source, output, theme='white', quality=0.95, layout=None, **fields):
     request = dict(version=1, input=str(source), output=str(output), theme=theme,
                    camera='ILCE-7M4', lens='FE 24-70mm F2.8 GM II · 35mm',
                    exposure='f/2.8 · 1/250s · ISO 100', capturedAt='2026.10.27 09:41', quality=quality)
     request.update(fields)
+    if layout is not None:
+        request['layout'] = layout
     path = directory / 'request.json'
     path.write_text(json.dumps(request, ensure_ascii=False))
     return subprocess.run([str(BINARY), '--request', str(path)], capture_output=True, text=True)
 
 
-def check_brand_spacing(image, photo_height, background):
+def check_brand_spacing(image, photo_width, footer_height, background):
     image = image.convert('RGB')
-    footer_height = image.height - photo_height
-    rows = range(photo_height + 1, image.height - 1)
+    rows = range(image.height - footer_height + 1, image.height - 1)
 
     def visible(x, y):
         return sum(abs(c-background) for c in image.getpixel((x, y))) / 3 > 32
@@ -51,7 +52,26 @@ def check_brand_spacing(image, photo_height, background):
                     if any(visible(x, y) for y in rows)]
     check(bool(text_columns), 'Missing right-side text')
     gap = min(text_columns) - line_right - 1
-    check(1 <= gap <= math.ceil(image.width * 0.02), f'Divider too far from text: {gap}px')
+    check(1 <= gap <= math.ceil(photo_width * 0.02), f'Divider too far from text: {gap}px')
+
+
+def layout_dimensions(photo_width, photo_height, layout):
+    border = math.floor(photo_width * 0.02 + 0.5) if layout != 'bottomOnly' else 0
+    footer = math.floor(photo_width * 0.08 + 0.5)
+    return (photo_width + border * 2, photo_height + border + footer), border, footer
+
+
+def check_borders(image, photo_width, photo_height, border, background):
+    if border <= 2:
+        return
+    strips = [
+        (0, 0, image.width, border - 2),
+        (0, border + 2, border - 2, border + photo_height - 2),
+        (border + photo_width + 2, border + 2, image.width, border + photo_height - 2),
+    ]
+    for strip in strips:
+        means = ImageStat.Stat(image.crop(strip)).mean
+        check(all(abs(mean - background) < 4 for mean in means), 'Wrong border background or photo position')
 
 
 with tempfile.TemporaryDirectory(prefix='exify-cli-') as folder:
@@ -65,39 +85,51 @@ with tempfile.TemporaryDirectory(prefix='exify-cli-') as folder:
         source = directory / f'orientation-{orientation}.jpg'
         exif = Image.Exif(); exif[274] = orientation
         original.save(source, quality=100, subsampling=0, exif=exif)
-        output = directory / f'result-{orientation}.jpg'
-        result = render(directory, source, output)
-        check(result.returncode == 0, result.stderr)
         expected = ImageOps.exif_transpose(Image.open(source))
-        actual = Image.open(output)
-        check(actual.size == (expected.width, expected.height + round(expected.width * 0.1)), 'Wrong oriented dimensions')
-        crop = actual.crop((0, 0, expected.width, expected.height))
-        # Compare far from quadrant edges to allow JPEG chroma subsampling.
-        for x, y in [(30, 30), (expected.width-30, 30), (30, expected.height-30), (expected.width-30, expected.height-30)]:
-            delta = max(abs(a-b) for a,b in zip(crop.getpixel((x,y)), expected.getpixel((x,y))))
-            check(delta < 8, f'Orientation {orientation} wrong at {(x,y)}: {delta}')
-        check(actual.getexif().get(274, 1) == 1, 'Unnormalized EXIF orientation')
+        # Omitting layout exercises requests saved before this setting existed.
+        for layout in [None, 'bordered', 'bottomOnly']:
+            output = directory / f'result-{orientation}-{layout}.jpg'
+            result = render(directory, source, output, layout=layout)
+            check(result.returncode == 0, result.stderr)
+            size, border, footer = layout_dimensions(expected.width, expected.height, layout)
+            actual = Image.open(output)
+            check(actual.size == size, 'Wrong oriented dimensions')
+            check(json.loads(result.stdout) == dict(width=size[0], height=size[1], footerHeight=footer),
+                  'Wrong reported canvas or footer dimensions')
+            crop = actual.crop((border, border, border + expected.width, border + expected.height))
+            # Compare far from quadrant edges to allow JPEG chroma subsampling.
+            for x, y in [(30, 30), (expected.width-30, 30), (30, expected.height-30), (expected.width-30, expected.height-30)]:
+                delta = max(abs(a-b) for a,b in zip(crop.getpixel((x,y)), expected.getpixel((x,y))))
+                check(delta < 8, f'Orientation {orientation}, layout {layout} wrong at {(x,y)}: {delta}')
+            check(actual.getexif().get(274, 1) == 1, 'Unnormalized EXIF orientation')
+            check_borders(actual, expected.width, expected.height, border, 255)
 
     for theme, gray in [('white', 255), ('black', 0)]:
-        source = directory / 'orientation-1.jpg'
-        output = directory / f'theme-{theme}.jpg'
-        result = render(directory, source, output, theme=theme, exposure='f/2.8 · 1/60s · ISO 100')
-        check(result.returncode == 0, result.stderr)
-        actual = Image.open(output)
-        check(max(abs(c-gray) for c in actual.getpixel((2, actual.height-2))) < 3, 'Wrong footer background')
-        check(34853 not in actual.getexif(), 'GPS reintroduced')
-        check(272 not in actual.getexif(), 'Catalog camera text reintroduced as embedded metadata')
-        check_brand_spacing(actual, original.height, gray)
-        # The reserved gaps remain empty, even with a very long camera/lens string.
-        output = directory / f'overflow-{theme}.jpg'
-        result = render(directory, source, output, theme=theme, camera='超长相机型号'*50, lens='LONG镜头'*100,
-                        exposure='f/22 · 1/8000s · ISO 102400')
-        check(result.returncode == 0, result.stderr)
-        actual = Image.open(output)
-        for fraction in [0.55]:
-            gap = actual.crop((int(320*fraction), 244, int(320*fraction)+3, 268))
-            check(all(abs(mean-gray) < 5 for mean in ImageStat.Stat(gap).mean), 'Text or logo overflowed its region')
-        check_brand_spacing(actual, original.height, gray)
+        for orientation in [1, 6]:
+            source = directory / f'orientation-{orientation}.jpg'
+            expected = ImageOps.exif_transpose(Image.open(source))
+            for layout in ['bordered', 'bottomOnly']:
+                output = directory / f'theme-{theme}-{orientation}-{layout}.jpg'
+                result = render(directory, source, output, theme=theme, layout=layout, exposure='f/2.8 · 1/60s · ISO 100')
+                check(result.returncode == 0, result.stderr)
+                actual = Image.open(output)
+                size, border, footer = layout_dimensions(expected.width, expected.height, layout)
+                check(actual.size == size, 'Wrong themed dimensions')
+                check(max(abs(c-gray) for c in actual.getpixel((2, actual.height-2))) < 3, 'Wrong footer background')
+                check(34853 not in actual.getexif(), 'GPS reintroduced')
+                check(272 not in actual.getexif(), 'Catalog camera text reintroduced as embedded metadata')
+                check_borders(actual, expected.width, expected.height, border, gray)
+                check_brand_spacing(actual, expected.width, footer, gray)
+                # The reserved gap remains empty with long camera/lens strings.
+                output = directory / f'overflow-{theme}-{orientation}-{layout}.jpg'
+                result = render(directory, source, output, theme=theme, layout=layout,
+                                camera='超长相机型号'*50, lens='LONG镜头'*100, exposure='f/22 · 1/8000s · ISO 102400')
+                check(result.returncode == 0, result.stderr)
+                actual = Image.open(output)
+                gap_x = border + int(expected.width * 0.55)
+                gap = actual.crop((gap_x, actual.height - footer + 3, gap_x + 3, actual.height - 3))
+                check(all(abs(mean-gray) < 5 for mean in ImageStat.Stat(gap).mean), 'Text or logo overflowed its region')
+                check_brand_spacing(actual, expected.width, footer, gray)
 
     for name in ["中文 空格 ' $() ` & ;.tif", 'missing-fields.tif']:
         source = directory / name
@@ -114,6 +146,9 @@ with tempfile.TemporaryDirectory(prefix='exify-cli-') as folder:
     result = render(directory, source, output, quality=-1)
     check(result.returncode != 0, 'Invalid quality accepted')
     check(output.read_bytes() == b'original contents', 'Failure changed existing output')
+    result = render(directory, source, output, layout='invalid')
+    check(result.returncode != 0, 'Invalid layout accepted')
+    check(output.read_bytes() == b'original contents', 'Invalid layout changed existing output')
     request = directory / 'invalid.json'; request.write_text('{broken')
     result = subprocess.run([str(BINARY), '--request', str(request)], capture_output=True)
     check(result.returncode != 0, 'Invalid JSON accepted')
