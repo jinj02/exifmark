@@ -1,0 +1,206 @@
+import CoreGraphics
+import CoreText
+import Darwin
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+public struct RenderResult: Codable {
+    public let width: Int
+    public let height: Int
+    public let footerHeight: Int
+}
+
+public struct CardRenderer {
+    public init() {}
+
+    @discardableResult
+    public func render(_ request: RenderRequest) throws -> RenderResult {
+        try request.validate()
+        let inputURL = URL(fileURLWithPath: request.input)
+        let outputURL = URL(fileURLWithPath: request.output)
+        guard let source = CGImageSourceCreateWithURL(inputURL as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, [
+                kCGImageSourceShouldCacheImmediately: true,
+              ] as CFDictionary) else { throw RenderError.input }
+
+        var properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+        let orientation = (properties[kCGImagePropertyOrientation as String] as? NSNumber)?.intValue ?? 1
+        let swap = (5...8).contains(orientation)
+        let width = swap ? image.height : image.width
+        let photoHeight = swap ? image.width : image.height
+        let footerHeight = Int((Double(width) * 0.10).rounded())
+        let height = photoHeight + footerHeight
+        guard width > 0, photoHeight > 0, width <= 65535, height <= 65535,
+              Double(width) * Double(height) <= 200_000_000 else {
+            throw RenderError.invalid("画布超出JPEG尺寸或内存限制，请缩小照片后导出。")
+        }
+
+        // Draw and encode in the upstream RGB profile. Grayscale inputs use sRGB.
+        let colorSpace = image.colorSpace.flatMap { $0.model == .rgb ? $0 : nil }
+            ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else { throw RenderError.allocation }
+        context.setFillColor(gray: request.theme == .white ? 1 : 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.interpolationQuality = .none
+        context.saveGState()
+        context.translateBy(x: 0, y: CGFloat(footerHeight))
+        context.concatenate(Self.orientationTransform(orientation, width: image.width, height: image.height))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        context.restoreGState()
+        if footerHeight > 0 {
+            try drawFooter(in: context, width: CGFloat(width), height: CGFloat(footerHeight), request: request)
+        }
+        guard let card = context.makeImage() else { throw RenderError.allocation }
+
+        Self.updateProperties(&properties, width: width, height: height)
+        properties[kCGImageDestinationLossyCompressionQuality as String] = request.quality
+        properties[kCGImageDestinationEmbedThumbnail as String] = false
+        properties[kCGImageDestinationMergeMetadata as String] = true
+        let metadata = Self.updatedMetadata(source, width: width, height: height)
+
+        // A same-directory temporary file makes rename atomic, including replacement.
+        let temporaryURL = outputURL.deletingLastPathComponent()
+            .appendingPathComponent(".exify-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        guard let destination = CGImageDestinationCreateWithURL(
+            temporaryURL as CFURL, UTType.jpeg.identifier as CFString, 1, nil
+        ) else { throw RenderError.output }
+        CGImageDestinationAddImageAndMetadata(destination, card, metadata, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw RenderError.output }
+        let result = temporaryURL.withUnsafeFileSystemRepresentation { temporary in
+            outputURL.withUnsafeFileSystemRepresentation { output in rename(temporary!, output!) }
+        }
+        guard result == 0 else { throw RenderError.write(String(cString: strerror(errno))) }
+        return RenderResult(width: width, height: height, footerHeight: footerHeight)
+    }
+
+    static func orientationTransform(_ orientation: Int, width: Int, height: Int) -> CGAffineTransform {
+        let w = CGFloat(width), h = CGFloat(height)
+        switch orientation {
+        case 2: return CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: w, ty: 0)
+        case 3: return CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: w, ty: h)
+        case 4: return CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)
+        case 5: return CGAffineTransform(a: 0, b: -1, c: -1, d: 0, tx: h, ty: w)
+        case 6: return CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: w)
+        case 7: return CGAffineTransform(a: 0, b: 1, c: 1, d: 0, tx: 0, ty: 0)
+        case 8: return CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: h, ty: 0)
+        default: return .identity
+        }
+    }
+
+    private func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest) throws {
+        let primary: CGFloat = request.theme == .white ? 0.075 : 0.97
+        let secondary: CGFloat = request.theme == .white ? 0.46 : 0.65
+        let left = CGRect(x: width * 0.04, y: 0, width: width * 0.475, height: height)
+        let right = CGRect(x: width * 0.735, y: 0, width: width * 0.225, height: height)
+        drawText(request.camera, in: context, frame: left, centerY: height * 0.66,
+                 size: width * 0.020, weight: .emphasizedSystem, gray: primary, rightAligned: false)
+        drawText(request.lens, in: context, frame: left, centerY: height * 0.34,
+                 size: width * 0.0135, weight: .system, gray: secondary, rightAligned: false)
+        let exposureLeft = drawText(request.exposure, in: context, frame: right, centerY: height * 0.66,
+                                    size: width * 0.0155, weight: .system, gray: primary, rightAligned: true)
+        let dateLeft = drawText(request.capturedAt, in: context, frame: right, centerY: height * 0.34,
+                               size: width * 0.0135, weight: .system, gray: secondary, rightAligned: true)
+
+        let separatorWidth = max(1, (width * 0.001).rounded())
+        let separatorHeight = (height * 0.42).rounded()
+        let textLeft = [exposureLeft, dateLeft].compactMap { $0 }.min() ?? right.minX
+        // Anchor the brand group to the visible text, including its fitted font size.
+        let separatorX = (textLeft - width * 0.012 - separatorWidth).rounded()
+        context.setFillColor(gray: secondary, alpha: 1)
+        context.fill(CGRect(x: separatorX,
+                            y: ((height - separatorHeight) / 2).rounded(),
+                            width: separatorWidth, height: separatorHeight))
+
+        let name = request.theme == .white ? "sony-black" : "sony-white"
+        // Resolve beside the executable so distribution never relies on a build-machine path.
+        guard let executable = Bundle.main.executableURL,
+              let resources = Bundle(url: executable.deletingLastPathComponent()
+                .appendingPathComponent("ExifyRenderer_ExifyCore.bundle")),
+              let url = resources.url(forResource: name, withExtension: "pdf"),
+              let document = CGPDFDocument(url as CFURL), let page = document.page(at: 1) else {
+            throw RenderError.logo
+        }
+        let bounds = page.getBoxRect(.mediaBox)
+        let logoWidth = width * 0.112
+        let logoHeight = logoWidth * bounds.height / bounds.width
+        let rect = CGRect(x: separatorX - width * 0.018 - logoWidth, y: (height - logoHeight) / 2,
+                          width: logoWidth, height: logoHeight)
+        context.saveGState()
+        context.concatenate(page.getDrawingTransform(.mediaBox, rect: rect, rotate: 0, preserveAspectRatio: true))
+        context.drawPDFPage(page)
+        context.restoreGState()
+    }
+
+    @discardableResult
+    private func drawText(_ text: String, in context: CGContext, frame: CGRect, centerY: CGFloat,
+                          size: CGFloat, weight: CTFontUIFontType, gray: CGFloat, rightAligned: Bool) -> CGFloat? {
+        let text = text.components(separatedBy: .controlCharacters).joined(separator: " ")
+        guard !text.isEmpty else { return nil }
+        let color = CGColor(gray: gray, alpha: 1)
+        func line(at size: CGFloat) -> CTLine {
+            let font = CTFontCreateUIFontForLanguage(weight, size, nil)!
+            let string = NSAttributedString(string: text, attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+            ])
+            return CTLineCreateWithAttributedString(string)
+        }
+        var fitted = line(at: size)
+        let naturalWidth = CGFloat(CTLineGetTypographicBounds(fitted, nil, nil, nil))
+        if naturalWidth > frame.width {
+            let fittedSize = max(size * 0.75, size * frame.width / naturalWidth)
+            fitted = line(at: fittedSize)
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateUIFontForLanguage(weight, fittedSize, nil)!,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+            ]))
+            fitted = CTLineCreateTruncatedLine(fitted, Double(frame.width), .end, token) ?? token
+        }
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        let lineWidth = CGFloat(CTLineGetTypographicBounds(fitted, &ascent, &descent, nil))
+        let textX = rightAligned ? frame.maxX - lineWidth : frame.minX
+        context.saveGState()
+        context.clip(to: frame)
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x: textX, y: centerY - (ascent - descent) / 2)
+        CTLineDraw(fitted, context)
+        context.restoreGState()
+        let inkBounds = CTLineGetBoundsWithOptions(fitted, .useGlyphPathBounds)
+        guard !inkBounds.isNull, inkBounds.minX.isFinite else { return nil }
+        return max(frame.minX, textX + inkBounds.minX)
+    }
+
+    private static func updateProperties(_ properties: inout [String: Any], width: Int, height: Int) {
+        properties[kCGImagePropertyPixelWidth as String] = width
+        properties[kCGImagePropertyPixelHeight as String] = height
+        properties[kCGImagePropertyOrientation as String] = 1
+        if var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] {
+            tiff[kCGImagePropertyTIFFOrientation as String] = 1
+            properties[kCGImagePropertyTIFFDictionary as String] = tiff
+        }
+        if var exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] {
+            exif[kCGImagePropertyExifPixelXDimension as String] = width
+            exif[kCGImagePropertyExifPixelYDimension as String] = height
+            properties[kCGImagePropertyExifDictionary as String] = exif
+        }
+    }
+
+    private static func updatedMetadata(_ source: CGImageSource, width: Int, height: Int) -> CGImageMetadata? {
+        guard let original = CGImageSourceCopyMetadataAtIndex(source, 0, nil),
+              let metadata = CGImageMetadataCreateMutableCopy(original) else { return nil }
+        // Update existing XMP technical fields without reintroducing catalog metadata.
+        for (path, value) in [("tiff:Orientation", 1), ("tiff:ImageWidth", width), ("tiff:ImageLength", height),
+                              ("exif:PixelXDimension", width), ("exif:PixelYDimension", height)] {
+            if CGImageMetadataCopyTagWithPath(metadata, nil, path as CFString) != nil {
+                CGImageMetadataSetValueWithPath(metadata, nil, path as CFString, value as CFNumber)
+            }
+        }
+        return metadata
+    }
+}

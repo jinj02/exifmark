@@ -1,0 +1,8 @@
+SONY字标来源：
+https://commons.wikimedia.org/wiki/File:Sony_logo.svg
+
+SONY名称及字标属于Sony。字标仅用于照片卡片上的品牌标识。
+exify与Sony、Adobe无隶属或赞助关系。
+
+内置字标PDF来自原始SVG的矢量路径，分别使用黑色和白色填充。
+字标资源的权利与插件源码分开处理。
