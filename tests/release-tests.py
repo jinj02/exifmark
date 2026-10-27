@@ -264,7 +264,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_missing_notes_block_release(self):
         self.first_release()
-        (self.project / 'CHANGELOG.md').write_text('# 更新日志\n')
+        (self.project / 'CHANGELOG.md').write_text('# Changelog\n')
         self.commit('docs: Remove notes')
         with self.assertRaisesRegex(release.ReleaseError, '更新说明'):
             release.release_candidate(self.project, 'push', self.push_event(), 'refs/heads/main')

@@ -28,8 +28,8 @@ COMMIT_PATTERN = re.compile(
     r'^(?:\[(?P<legacy>[\w-]+)\]|(?P<type>[\w-]+)(?:\((?P<scope>[^)]+)\))?'
     r'(?P<breaking>!)?:)\s*'
 )
-CHANGELOG_HEADER = '# 更新日志\n\n版本更新由升版命令根据Git提交记录生成。\n'
-GROUPS = ('不兼容变更', '新增功能', '问题修复', '性能优化', '其他变更')
+CHANGELOG_HEADER = '# Changelog\n\nRelease notes are generated from Git commit history by the version bump command.\n'
+GROUPS = ('Breaking Changes', 'Features', 'Bug Fixes', 'Performance Improvements', 'Other Changes')
 
 
 class ReleaseError(Exception):
@@ -167,12 +167,12 @@ def changelog_entries(project_root, previous_tag=None):
         ):
             continue
         if (match and match['breaking']) or re.search(r'^BREAKING[ -]CHANGE:', body, re.M):
-            group = '不兼容变更'
+            group = 'Breaking Changes'
         else:
             group = {
-                'feat': '新增功能', 'feature': '新增功能',
-                'fix': '问题修复', 'perf': '性能优化',
-            }.get(commit_type, '其他变更')
+                'feat': 'Features', 'feature': 'Features',
+                'fix': 'Bug Fixes', 'perf': 'Performance Improvements',
+            }.get(commit_type, 'Other Changes')
         escaped = subject.replace('\\', '\\\\').replace('[', '\\[').replace(']', '\\]')
         groups[group].append(f'- {escaped} ([{commit[:7]}]({url}/commit/{commit}))')
     sections = [f'### {group}\n\n' + '\n'.join(groups[group]) for group in GROUPS if groups[group]]

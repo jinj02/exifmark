@@ -113,7 +113,7 @@ python3 scripts/release.py bump minor
 python3 scripts/release.py bump patch
 ```
 
-命令修改插件版本并更新`CHANGELOG.md`，生成的变更可先审阅、补充说明，再以`chore(release): <版本>`提交。首次更新文档涵盖全部提交，后续涵盖上次正式tag以来的提交；兼容`[feat]`、`[fix]`和`feat:`、`fix:`等格式，按中文标题分类，保留提交原文及链接，并忽略merge和升版提交。
+命令修改插件版本并更新`CHANGELOG.md`，生成的变更可先审阅、补充说明，再以`chore(release): <版本>`提交。首次更新文档涵盖全部提交，后续涵盖上次正式tag以来的提交；兼容`[feat]`、`[fix]`和`feat:`、`fix:`等格式，按英文标题分类，保留提交原文及链接，并忽略merge和升版提交。
 
 PR、推送`main`和手动触发都会运行CI。CI在Apple Silicon构建双架构插件并运行完整自动测试，再将同一份ZIP交给Intel运行器验证。ZIP和SHA-256校验文件在Actions保存14天。`0.0.0`、PR和手动运行提供开发包；`main`上的正式版本升级push通过全部检查后，自动创建`v<版本>`tag和GitHub Release，发布说明来自对应的CHANGELOG章节。
 
