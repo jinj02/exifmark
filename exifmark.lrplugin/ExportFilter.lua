@@ -9,7 +9,6 @@ local LrView = import 'LrView'
 local Metadata = require 'Metadata'
 local Json = require 'Json'
 local Settings = require 'Settings'
-local LightroomJPEG = require 'LightroomJPEG'
 local Filter = {}
 local helper = LrPathUtils.child(_PLUGIN.path, 'bin/exifmark-render')
 local dialogObservers = setmetatable({}, { __mode = 'k' })
@@ -21,8 +20,8 @@ end
 local function updateStatus(properties)
     local reason = compatibilityError(properties)
     properties.exifmark_status = reason or (properties.exifmark_layout == 'bottomOnly'
-        and '底部追加8%参数栏，比例按照片宽度计算。照片区域尺寸保持不变。'
-        or '上、左、右各留白2%，底部追加8%参数栏，比例按照片宽度计算。照片区域尺寸保持不变。')
+        and '底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。保留照片压缩数据。'
+        or '上、左、右各留白2%，底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。')
     -- Do not overwrite a validation error owned by another export provider.
     local previous = dialogObservers[properties]
     if reason and (properties.LR_cantExportBecause == nil or properties.LR_cantExportBecause == previous) then
@@ -102,11 +101,9 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
     local problem = compatibilityError(properties)
     local progress = LrProgressScope { title = 'exifmark · 生成照片卡片', functionContext = functionContext }
     local workDir = LrPathUtils.child(LrPathUtils.getStandardFilePath('temp'), 'exifmark-' .. LrUUID.generateUUID())
-    local jpeg = LightroomJPEG.new(filterContext.sourceExportSession.catalog, workDir)
     LrFileUtils.createAllDirectories(workDir)
     functionContext:addCleanupHandler(function()
-        -- Preserve files if Lightroom could not remove a temporary catalog record.
-        if jpeg:isClean() then LrFileUtils.delete(workDir) end
+        LrFileUtils.delete(workDir)
         progress:done()
     end)
 
@@ -115,13 +112,10 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
     local renditionOptions = {
         filterSettings = function(rendition, upstream)
             -- Leave Lightroom's size, sharpening, privacy and ICC settings intact.
-            upstream.LR_format = 'TIFF'
-            upstream.LR_export_bitDepth = 8
-            upstream.LRtiff_compressionMethod = 'compressionMethod_ZIP'
-            upstream.LR_tiff_preserveTransparency = false
+            upstream.LR_format = 'JPEG'
             upstream.LR_enableHDRDisplay = false
             upstream.LR_jpeg_useLimitSize = false
-            return LrPathUtils.child(workDir, LrUUID.generateUUID() .. '.tif')
+            return LrPathUtils.child(workDir, LrUUID.generateUUID() .. '.jpg')
         end,
     }
 
@@ -146,11 +140,11 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                     return LrDate.timeToUserFormat(timestamp, '%Y.%m.%d %H:%M', true)
                 end)
                 local stem = LrPathUtils.child(workDir, LrUUID.generateUUID())
-                local requestPath, errorPath, cardPath = stem .. '.json', stem .. '.error', stem .. '-card.tif'
+                local requestPath, errorPath = stem .. '.json', stem .. '.error'
                 writeRequest(requestPath, {
                     version = 1,
                     input = sourcePath,
-                    output = cardPath,
+                    output = destination.destinationPath,
                     theme = properties.exifmark_theme,
                     layout = properties.exifmark_layout or 'bordered',
                     camera = fields.camera, lens = fields.lens,
@@ -162,16 +156,7 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                     .. ' > /dev/null 2> ' .. Settings.quote(errorPath)
                 local exitCode = LrTasks.execute(command)
                 if exitCode ~= 0 then error(errorMessage(errorPath, exitCode)) end
-                if LrFileUtils.exists(cardPath) ~= 'file' then error('渲染程序未生成带框TIFF。') end
-                if progress:isCanceled() then error('导出已取消。') end
-                local jpegPath = jpeg:encode(cardPath, properties)
-                -- Install Lightroom's bytes without decoding or re-encoding the JPEG.
-                writeRequest(requestPath, {input = jpegPath, output = destination.destinationPath})
-                command = Settings.quote(helper) .. ' --install-jpeg ' .. Settings.quote(requestPath)
-                    .. ' > /dev/null 2> ' .. Settings.quote(errorPath)
-                exitCode = LrTasks.execute(command)
-                if exitCode ~= 0 then error(errorMessage(errorPath, exitCode)) end
-                if LrFileUtils.exists(destination.destinationPath) ~= 'file' then error('LrC未生成最终JPEG文件。') end
+                if LrFileUtils.exists(destination.destinationPath) ~= 'file' then error('渲染程序未生成最终JPEG文件。') end
                 LrFileUtils.delete(requestPath)
                 LrFileUtils.delete(errorPath)
             end)
@@ -181,8 +166,6 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
             progress:setPortionComplete(index, math.max(total, 1))
         end
     end)
-    local cleaned, cleanupError = LrTasks.pcall(function() jpeg:cleanup() end)
-    if not cleaned then error('exifmark临时图清理失败：' .. tostring(cleanupError)) end
     if not completed then error(exportError) end
 end
 

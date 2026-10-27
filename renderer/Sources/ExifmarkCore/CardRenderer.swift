@@ -19,12 +19,18 @@ public struct CardRenderer {
         try request.validate()
         let inputURL = URL(fileURLWithPath: request.input)
         let outputURL = URL(fileURLWithPath: request.output)
-        guard let source = CGImageSourceCreateWithURL(inputURL as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, [
-                kCGImageSourceShouldCacheImmediately: true,
+        guard let source = CGImageSourceCreateWithURL(inputURL as CFURL, nil) else { throw RenderError.input }
+        let usesCoefficients = ["jpg", "jpeg"].contains(outputURL.pathExtension.lowercased())
+            && CGImageSourceGetType(source).map({ $0 as String }) == UTType.jpeg.identifier
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, [
+                kCGImageSourceShouldCacheImmediately: !usesCoefficients,
+                kCGImageSourceShouldCache: !usesCoefficients,
               ] as CFDictionary) else { throw RenderError.input }
 
         var properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] ?? [:]
+        if usesCoefficients {
+            return try renderJPEG(request, source: source, image: image, properties: properties)
+        }
         let orientation = (properties[kCGImagePropertyOrientation as String] as? NSNumber)?.intValue ?? 1
         let swap = (5...8).contains(orientation)
         let photoWidth = swap ? image.height : image.width
@@ -108,7 +114,7 @@ public struct CardRenderer {
         }
     }
 
-    private func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest) throws {
+    func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest) throws {
         let primary: CGFloat = request.theme == .white ? 0.075 : 0.97
         let secondary: CGFloat = request.theme == .white ? 0.46 : 0.65
         let sideInset = width * 0.01
@@ -207,11 +213,12 @@ public struct CardRenderer {
         }
     }
 
-    private static func updatedMetadata(_ source: CGImageSource, width: Int, height: Int) -> CGImageMetadata? {
+    static func updatedMetadata(_ source: CGImageSource, width: Int, height: Int,
+                                orientation: Int = 1) -> CGImageMetadata? {
         guard let original = CGImageSourceCopyMetadataAtIndex(source, 0, nil),
               let metadata = CGImageMetadataCreateMutableCopy(original) else { return nil }
         // Update existing XMP technical fields without reintroducing catalog metadata.
-        for (path, value) in [("tiff:Orientation", 1), ("tiff:ImageWidth", width), ("tiff:ImageLength", height),
+        for (path, value) in [("tiff:Orientation", orientation), ("tiff:ImageWidth", width), ("tiff:ImageLength", height),
                               ("exif:PixelXDimension", width), ("exif:PixelYDimension", height)] {
             if CGImageMetadataCopyTagWithPath(metadata, nil, path as CFString) != nil {
                 CGImageMetadataSetValueWithPath(metadata, nil, path as CFString, value as CFNumber)

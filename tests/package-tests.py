@@ -15,7 +15,7 @@ with zipfile.ZipFile(archive) as package:
     assert (executable.external_attr >> 16) & 0o111, 'Executable permission missing from ZIP'
     assert all(p.filename.startswith('exifmark.lrplugin/') for p in package.infolist())
     assert not any('__MACOSX' in p.filename or '.DS_Store' in p.filename for p in package.infolist())
-    assert 'exifmark.lrplugin/LightroomJPEG.lua' in package.namelist()
+    assert 'exifmark.lrplugin/licenses/libjpeg-turbo-LICENSE.md' in package.namelist()
 
 with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     directory = Path(folder)

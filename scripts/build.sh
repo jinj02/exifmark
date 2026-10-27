@@ -4,6 +4,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export CLANG_MODULE_CACHE_PATH="$PROJECT_ROOT/.build/clang-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$PROJECT_ROOT/.build/swift-cache"
 mkdir -p "$PROJECT_ROOT/exifmark.lrplugin/bin" "$PROJECT_ROOT/.build"
+"$PROJECT_ROOT/scripts/prepare-jpeg.sh"
 
 for architecture in arm64 x86_64; do
     swift build --package-path "$PROJECT_ROOT/renderer" \

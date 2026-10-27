@@ -55,9 +55,14 @@ def check_brand_spacing(image, photo_width, footer_height, background):
     check(1 <= gap <= math.ceil(photo_width * 0.02), f'Divider too far from text: {gap}px')
 
 
-def layout_dimensions(photo_width, photo_height, layout):
+def layout_dimensions(photo_width, photo_height, layout, jpeg=False):
     border = math.floor(photo_width * 0.02 + 0.5) if layout != 'bottomOnly' else 0
     footer = math.floor(photo_width * 0.08 + 0.5)
+    if jpeg:
+        border = math.ceil(border / 8) * 8
+        footer = math.ceil(max(1, footer) / 8) * 8
+        photo_width = math.ceil(photo_width / 8) * 8
+        photo_height = math.ceil(photo_height / 8) * 8
     return (photo_width + border * 2, photo_height + border + footer), border, footer
 
 
@@ -91,8 +96,10 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
             output = directory / f'result-{orientation}-{layout}.jpg'
             result = render(directory, source, output, layout=layout)
             check(result.returncode == 0, result.stderr)
-            size, border, footer = layout_dimensions(expected.width, expected.height, layout)
-            actual = Image.open(output)
+            size, border, footer = layout_dimensions(expected.width, expected.height, layout, jpeg=True)
+            stored = Image.open(output)
+            check(stored.quantization == Image.open(source).quantization, 'JPEG quantization tables changed')
+            actual = ImageOps.exif_transpose(stored)
             check(actual.size == size, 'Wrong oriented dimensions')
             check(json.loads(result.stdout) == dict(width=size[0], height=size[1], footerHeight=footer),
                   'Wrong reported canvas or footer dimensions')
@@ -112,8 +119,8 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                 output = directory / f'theme-{theme}-{orientation}-{layout}.jpg'
                 result = render(directory, source, output, theme=theme, layout=layout, exposure='f/2.8 · 1/60s · ISO 100')
                 check(result.returncode == 0, result.stderr)
-                actual = Image.open(output)
-                size, border, footer = layout_dimensions(expected.width, expected.height, layout)
+                actual = ImageOps.exif_transpose(Image.open(output))
+                size, border, footer = layout_dimensions(expected.width, expected.height, layout, jpeg=True)
                 check(actual.size == size, 'Wrong themed dimensions')
                 check(max(abs(c-gray) for c in actual.getpixel((2, actual.height-2))) < 3, 'Wrong footer background')
                 check(34853 not in actual.getexif(), 'GPS reintroduced')
@@ -125,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                 result = render(directory, source, output, theme=theme, layout=layout,
                                 camera='超长相机型号'*50, lens='LONG镜头'*100, exposure='f/22 · 1/8000s · ISO 102400')
                 check(result.returncode == 0, result.stderr)
-                actual = Image.open(output)
+                actual = ImageOps.exif_transpose(Image.open(output))
                 gap_x = border + int(expected.width * 0.55)
                 gap = actual.crop((gap_x, actual.height - footer + 3, gap_x + 3, actual.height - 3))
                 check(all(abs(mean-gray) < 5 for mean in ImageStat.Stat(gap).mean), 'Text or logo overflowed its region')
@@ -153,7 +160,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
     result = subprocess.run([str(BINARY), '--request', str(request)], capture_output=True)
     check(result.returncode != 0, 'Invalid JSON accepted')
     check(not list(directory.glob('.exifmark-*.jpg')), 'Leaked intermediate output')
-    # The card reaches Lightroom as lossless RGB, regardless of the JPEG quality setting.
+    # Direct TIFF requests retain the lossless compatibility path.
     pixels = bytes((i * 73 + i // 17 * 41) % 256 for i in range(511 * 383 * 3))
     uncompressed = Image.frombytes('RGB', (511, 383), pixels)
     source = directory / 'lossless-source.tif'

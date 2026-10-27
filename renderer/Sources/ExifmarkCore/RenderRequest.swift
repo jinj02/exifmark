@@ -18,6 +18,7 @@ public struct RenderRequest: Codable {
     public var lens: String
     public var exposure: String
     public var capturedAt: String
+    // JPEG inputs retain their own quantization tables; this value applies to other inputs.
     public var quality: Double
 
     public init(input: String, output: String, theme: Theme = .white, layout: Layout = .bordered,

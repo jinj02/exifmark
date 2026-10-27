@@ -17,7 +17,7 @@
 
 **exifmark** 是一款针对 macOS 平台的 Adobe Lightroom Classic (LrC) 导出增效工具。它直接嵌入 LrC 的导出流程中，无需借助 Photoshop 或第三方拼图软件，即可在导出 JPEG 照片时自动加上画框留白、相机与镜头型号、SONY 矢量字标、曝光参数（光圈 / 快门 / ISO）以及拍摄时间。
 
-底层渲染采用 macOS 原生 Swift + CoreGraphics / CoreText / ImageIO 实现，零第三方运行时依赖，完整保留原图画质与色彩空间配置。
+底层渲染采用macOS原生Swift、CoreGraphics、CoreText与ImageIO，静态链接libjpeg-turbo处理JPEG压缩系数，保留照片区域的原始量化系数与色彩空间配置。
 
 ## ✨ 功能特性
 
@@ -26,10 +26,10 @@
   - **配色**：支持纯白底（黑字）与纯黑底（白字），内置矢量 SONY 字标自动反色。
   - **三边留白 + 底部参数栏（默认）**：上、左、右各追加照片宽度 `2%` 的留白边框，底部追加 `8%` 的参数栏。
   - **仅底部参数栏**：照片上、左、右三边贴边，仅底部追加照片宽度 `8%` 的参数栏。
-- **无损照片区域**：所有外框与参数栏均为**向外扩展画布**，绝不裁切或挤压 LrC 设定的原始导出像素尺寸。
+- **保留照片压缩数据**：所有外框与参数栏均向外扩展画布，直接复制LrC导出JPEG的量化DCT系数，照片区域免于二次有损编码。边框位置和照片占位向上对齐JPEG的MCU块，末端不足整块的部分保留原有块并向外补齐。
 - **智能排版与防溢出**：字号、Logo 与边距随照片宽度同比缩放；过长的相机或镜头名称会自动缩字（最低至 `75%`）并在超宽时优雅省略；缺失的 EXIF 字段自动留空。
 - **色彩与隐私安全**：
-  - LrC先输出8位无损TIFF，原生程序将照片、边框和参数栏合成为完整的无损TIFF，再临时导入当前目录，由LrC按导出窗口中的原有JPEG质量压缩整张成片，继承选定的RGB色彩空间。
+  - LrC按导出窗口中的质量输出JPEG。新增边框和参数栏使用这张JPEG的实际量化表、色度采样与分量配置进行压缩，再拼接原照片的量化系数并优化熵编码。整个流程无需TIFF中转或临时入库，继承原JPEG的ICC配置。
   - 展示的拍摄参数直接读取自 LrC 目录——即使你在导出设置中选择「移除位置信息」或「仅版权信息」，画面上的参数依然正常渲染，同时严格遵守导出隐私设置不向文件写入多余 EXIF。
 - **开箱即用**：内置 `arm64` + `x86_64` 通用二进制程序（Universal Binary），用户无需安装 Swift、Python 或 ImageMagick。
 
@@ -71,15 +71,15 @@
 ## ⚠️ 已知限制与兼容性
 
 - **仅支持 SDR JPEG 导出**：若在导出设置中选择了 TIFF / PNG / DNG 等其他格式、开启了「HDR 输出」或开启了「限制文件大小」，插件会在面板中给出提示并禁用导出按钮。
-- **中间图自动清理**：导出结束后移除临时导入的TIFF照片记录，再清理中间文件，并恢复清理前的照片选择、来源和筛选条件。清理会短暂切换到临时图所在文件夹；若LrC无法确认记录已移除，会保留相应文件并报告错误。自动清理使用LrC14.3新增接口。
+- **JPEG块对齐**：2%边框和8%参数栏按JPEG块向上取整，常见块尺寸为8×8或16×16像素。照片占位同步补齐到整块，尺寸可能增加少量像素；EXIF方向标记保留，照片无需旋转重编码。
 - **画布尺寸上限**：单张最终成片最大支持 2 亿像素（200 MP），且单边宽高不超过 `65,535 px`。
-- **批量处理与取消**：LrC生成最终JPEG后，以原始字节复制到目标目录内的临时文件，再原子替换目标文件；单张失败按张报告，其他照片继续处理；取消会在当前照片处理完成后停止后续照片。
+- **批量处理与取消**：成片先写入目标目录内的临时文件，再原子替换目标文件；导出结束后清理临时JPEG和请求文件。单张失败按张报告，其他照片继续处理；取消会在当前照片处理完成后停止后续照片。
 
 ---
 
 ## 🛠️ 从源码构建
 
-本项目无需任何第三方外部依赖，仅需安装 macOS **Xcode Command Line Tools**（支持 Swift 5.9+）。
+从源码构建需要macOS的Xcode命令行工具（Swift5.9+）和CMake。构建脚本首次运行会从上游下载固定版本的libjpeg-turbo3.1.4.1，校验SHA-256后静态编译两个架构。可用`EXIFMARK_CMAKE=/path/to/cmake`指定CMake；插件用户无需安装该依赖。
 
 ```bash
 # 1. 编译 arm64 + x86_64 通用二进制渲染器，并写入 exifmark.lrplugin/bin/
@@ -97,7 +97,7 @@
 ```text
 exifmark/
 ├── exifmark.lrplugin/  # Lightroom Classic Lua 插件源码与二进制包目录
-├── renderer/           # Swift 原生图像合成渲染器 (CoreGraphics / CoreText / ImageIO)
+├── renderer/           # Swift图像合成与C接口JPEG系数拼接
 ├── scripts/            # 构建、打包、自动化测试及矢量 Logo 转换脚本
 ├── tests/              # Lua 单元测试与基于 Pillow 的独立像素级解码验证
 ├── assets/             # 原始 SONY 矢量 SVG 字标与版权说明
@@ -108,5 +108,6 @@ exifmark/
 
 ## 📄 声明与致谢
 
+- JPEG处理静态链接[libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)，许可证随插件放在`licenses/`。This software is based in part on the work of the Independent JPEG Group.
 - 内置 `SONY` 矢量字标源自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Sony_logo.svg)，相关商标与名称权利归 Sony Group Corporation 所有。详见 [资源说明 (assets/NOTICE.md)](assets/NOTICE.md)。
 - 本项目为独立开发的开源工具，与 Sony 及 Adobe Inc. 无隶属、赞助或官方合作关系。

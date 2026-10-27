@@ -48,32 +48,7 @@ local quotedFile = scratch .. '/shell.txt'
 assert(os.execute('printf %s ' .. Settings.quote(special) .. ' > ' .. Settings.quote(quotedFile)) == 0)
 local f = assert(io.open(quotedFile, 'rb')); equal(f:read('*a'), special); f:close()
 local uuid, cancellation, executeFailure, renderedCount = 0, false, false, 0
-local createdWorkDir, requestPayload, executionCount, installCount, lrcExportCount
-local exportOptions = {}
-local catalog, entries = {}, {}
-local original = {getRawMetadata = function() return '/photos/original.arw' end}
-local active, selected, activeSources, viewFilter
-local removalCalls, sleepCalls
-function catalog:findPhotoByPath(path) return entries[path] end
-function catalog:withWriteAccessDo(_, callback, options)
-    equal(options.timeout,30)
-    return callback()
-end
-function catalog:addPhoto(path)
-    equal(path:sub(-4),'.tif')
-    entries[path]={getRawMetadata=function(_,key) if key=='path' then return path end end}
-end
-function catalog:getTargetPhoto() return active end
-function catalog:getTargetPhotos()
-    if exportOptions.selectionFailure then return {original} end
-    return selected
-end
-function catalog:getActiveSources() return activeSources end
-function catalog:getCurrentViewFilter() return viewFilter end
-function catalog:getFolderByPath(path) return {path=path} end
-function catalog:setActiveSources(value) activeSources=value; return true end
-function catalog:setViewFilter(value) viewFilter=value; return true end
-function catalog:setSelectedPhotos(value, others) active=value; selected=others end
+local createdWorkDir, requestPayload, executionCount
 local function read(path)
     local file = io.open(path,'rb'); if not file then return end
     local value = file:read('*a'); file:close(); return value
@@ -101,70 +76,19 @@ local sdk = {
     LrView = {bind = function(value) return value end},
     LrTasks = {
         pcall = pcall,
-        sleep = function() sleepCalls=sleepCalls+1 end,
         execute = function(command)
-            local install=command:find('--install-jpeg',1,true)
-            local path=command:match("%-%-request '([^']+)'") or command:match("%-%-install%-jpeg '([^']+)'")
+            local path=command:match("%-%-request '([^']+)'")
             local payload=assert(read(path))
             local output=payload:match('"output":"(.-)"')
-            local contents
-            if install then
-                installCount=installCount+1
-                if exportOptions.installFailure then return 1 end
-                contents=assert(read(payload:match('"input":"(.-)"')))
-                equal(contents:sub(1,8),'LrC JPEG')
-            else
-                executionCount=executionCount+1
-                requestPayload=payload
-                equal(output:sub(-4),'.tif')
-                if executeFailure then return 1 end
-                contents='mock lossless TIFF'
-            end
-            local file=assert(io.open(output,'wb')); file:write(contents); file:close(); return 0
+            executionCount=executionCount+1
+            requestPayload=payload
+            equal(output:sub(-4),'.jpg')
+            local contents=assert(read(payload:match('"input":"(.-)"')))
+            equal(contents:sub(1,8),'LrC JPEG')
+            if executeFailure then return 1 end
+            local file=assert(io.open(output,'wb')); file:write(contents .. ' + compressed footer'); file:close(); return 0
         end,
     },
-    LrSelection = {
-        selectNone = function() active=nil; selected={} end,
-        removeFromCatalog = function()
-            removalCalls=removalCalls+1
-            equal(#selected,1)
-            local path=selected[1]:getRawMetadata('path')
-            equal(path:sub(1,#createdWorkDir+1),createdWorkDir .. '/')
-            equal(selected[1]~=original,true)
-            if not exportOptions.cleanupFailure then entries[path]=nil end
-        end,
-    },
-    LrExportSession = function(params)
-        lrcExportCount=lrcExportCount+1
-        local n=lrcExportCount
-        local settings=params.exportSettings
-        equal(#params.photosToExport,1)
-        equal(settings.LR_format,'JPEG')
-        equal(settings.LR_jpeg_quality,exportOptions.quality or 0.9)
-        equal(settings.LR_export_colorSpace,'AdobeRGB')
-        equal(settings.LR_removeLocationMetadata,true)
-        equal(settings.LR_size_doConstrain,false)
-        equal(settings.LR_outputSharpeningOn,false)
-        equal(settings.LR_useWatermark,false)
-        equal(settings.LR_reimportExportedPhoto,false)
-        equal(next(settings.LR_exportFiltersFromThisPlugin),nil)
-        equal(settings.exifmark_layout,nil)
-        local input=params.photosToExport[1]:getRawMetadata('path')
-        equal(read(input),'mock lossless TIFF')
-        local output=input:gsub('%.tif$','.jpg')
-        return {renditions=function()
-            local visited=false
-            return function()
-                if visited then return end; visited=true
-                return 1,{waitForRender=function()
-                    if exportOptions.lrcFailure and n==2 then return false,'mock LrC failure' end
-                    local file=assert(io.open(output,'wb'))
-                    file:write('LrC JPEG quality=' .. tostring(settings.LR_jpeg_quality)); file:close()
-                    return true,output
-                end}
-            end
-        end}
-    end,
     LrProgressScope = function()
         return {isCanceled=function() return cancellation end, done=function() end,
             setCaption=function() end, setPortionComplete=function() end}
@@ -204,11 +128,7 @@ equal(next(props.callbacks),nil); equal(props.LR_cantExportBecause,'another plug
 local function runExport(options)
     options=options or {}
     cancellation,executeFailure = options.cancel or false,options.fail or false
-    exportOptions=options
-    entries={}
-    active,selected,activeSources,viewFilter=original,{original},{'original folder'},{filtersActive=true}
-    removalCalls,sleepCalls=0,0
-    executionCount,renderedCount,installCount,lrcExportCount=0,0,0,0
+    executionCount,renderedCount=0,0
     local destinations,sources,cleanup={},{},{}
     for i=1,3 do
         destinations[i] = {photo=photo, destinationPath=scratch .. '/out-' .. i .. '.jpg',
@@ -223,21 +143,23 @@ local function runExport(options)
     exportProperties.LR_outputSharpeningOn=true
     exportProperties.LR_useWatermark=true
     exportProperties.LR_exportFiltersFromThisPlugin={exifmarkCard=1}
-    local context = {propertyTable=exportProperties, renditionsToSatisfy=destinations,
-        sourceExportSession={catalog=catalog}}
+    local context = {propertyTable=exportProperties, renditionsToSatisfy=destinations}
     function context:renditions(renditionOptions)
         local i=0
         return function()
             i=i+1; if i>#destinations then return end
-            local upstream={LR_format='JPEG', LR_export_colorSpace='AdobeRGB', LR_removeLocationMetadata=true}
+            local upstream={LR_format='JPEG', LR_jpeg_quality=options.quality or 0.9,
+                LR_export_colorSpace='AdobeRGB', LR_removeLocationMetadata=true}
             local path=renditionOptions.filterSettings(destinations[i],upstream)
-            equal(upstream.LR_format,'TIFF'); equal(upstream.LR_export_colorSpace,'AdobeRGB')
-            equal(upstream.LRtiff_compressionMethod,'compressionMethod_ZIP')
+            equal(upstream.LR_format,'JPEG'); equal(upstream.LR_export_colorSpace,'AdobeRGB')
+            equal(upstream.LR_jpeg_quality,options.quality or 0.9)
+            equal(upstream.LRtiff_compressionMethod,nil)
+            equal(path:sub(-4),'.jpg')
             equal(upstream.LR_removeLocationMetadata,true); equal(upstream.LR_enableHDRDisplay,false)
             local source={skipRender=function(self) self.skipped=true end, waitForRender=function()
                 renderedCount=renderedCount+1
                 if options.upstreamFailure and i==2 then return false,'upstream render failed' end
-                local file=assert(io.open(path,'wb')); file:write('mock tiff'); file:close(); return true,path
+                local file=assert(io.open(path,'wb')); file:write('LrC JPEG quality=' .. tostring(upstream.LR_jpeg_quality)); file:close(); return true,path
             end}
             sources[i]=source; return source,destinations[i]
         end
@@ -247,15 +169,7 @@ local function runExport(options)
     for _,callback in ipairs(cleanup) do callback() end
     if not options.expectError then equal(ok,true) end
     for _,destination in ipairs(destinations) do equal(destination.calls,1) end
-    if options.cleanupFailure or options.selectionFailure then
-        equal(os.execute('test -d ' .. Settings.quote(createdWorkDir)),0)
-        equal(next(entries)~=nil,true)
-    else
-        equal(os.execute('test ! -e ' .. Settings.quote(createdWorkDir)),0)
-        equal(next(entries),nil)
-    end
-    equal(active,original); equal(#selected,1); equal(selected[1],original)
-    equal(activeSources[1],'original folder'); equal(viewFilter.filtersActive,true)
+    equal(os.execute('test ! -e ' .. Settings.quote(createdWorkDir)),0)
     equal(exportProperties.LR_jpeg_quality,options.quality or 0.9)
     equal(exportProperties.LR_size_doConstrain,true)
     equal(exportProperties.LR_outputSharpeningOn,true)
@@ -265,8 +179,8 @@ local function runExport(options)
 end
 local destinations=runExport()
 for _,d in ipairs(destinations) do equal(d.ok,true) end
-equal(executionCount,3); equal(installCount,3); equal(lrcExportCount,3); equal(removalCalls,3)
-equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=0.9')
+equal(executionCount,3)
+equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=0.9 + compressed footer')
 equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
 equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
 destinations=runExport({layout='bottomOnly'})
@@ -284,19 +198,7 @@ equal(executionCount,0); equal(renderedCount,0)
 for _,quality in ipairs({0,1}) do
     destinations=runExport({quality=quality})
     for _,d in ipairs(destinations) do equal(d.ok,true) end
-    equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=' .. tostring(quality))
+    equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=' .. tostring(quality) .. ' + compressed footer')
 end
-destinations=runExport({lrcFailure=true})
-equal(destinations[1].ok,true); equal(destinations[2].ok,false); equal(destinations[3].ok,true)
-equal(installCount,2); equal(removalCalls,3)
-destinations=runExport({installFailure=true})
-for _,d in ipairs(destinations) do equal(d.ok,false) end
-equal(removalCalls,3)
-local ok,message
-destinations,_,ok,message=runExport({cleanupFailure=true,expectError=true})
-equal(ok,false); equal(message:find('清理失败',1,true)~=nil,true)
-equal(removalCalls,1)
-destinations,_,ok,message=runExport({selectionFailure=true,expectError=true})
-equal(ok,false); equal(removalCalls,0)
 assert(os.execute('rm -rf ' .. Settings.quote(scratch)) == 0)
 print('Plugin validation: ' .. count .. ' assertions passed')

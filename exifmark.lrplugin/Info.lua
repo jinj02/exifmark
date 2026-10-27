@@ -10,5 +10,5 @@ return {
         file = 'ExportFilter.lua',
         supportsVideo = false,
     },
-    VERSION = { major = 0, minor = 1, revision = 0, build = 2 },
+    VERSION = { major = 0, minor = 1, revision = 0, build = 3 },
 }

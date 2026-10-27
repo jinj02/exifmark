@@ -7,8 +7,13 @@ exifmark 0.1.0
 支持macOS13及以上、Lightroom Classic14.3及以上。
 bin内包含Apple Silicon/Intel通用程序和矢量字标资源，请保留完整目录。
 横图和竖图默认上、左、右各留白2%，底部追加8%参数栏；可选仅底部8%参数栏。
-所有比例按方向校正后的照片宽度计算并四舍五入到整数像素，照片区域尺寸按LrC设置保留。
+所有比例按显示方向的照片宽度计算，再向上对齐JPEG块。照片占位同步补齐到整块，尺寸可能增加少量像素。
 背景颜色和边框布局均可随LrC导出预设保存。
 
-边框和参数栏先合成到无损TIFF中，再由LrC按导出窗口的原有JPEG质量压缩整张图片。
-导出结束后自动清理临时TIFF及其照片目录记录，并恢复照片选择和筛选条件。
+LrC先按原有质量导出JPEG，照片区域的量化DCT系数直接保留。
+新增边框和参数栏使用原JPEG的实际量化表和色度采样进行压缩，拼接后优化熵编码。
+无需TIFF中转或临时入库，导出结束后自动清理临时JPEG。
+原JPEG的ICC和EXIF方向标记保留。
+
+This software is based in part on the work of the Independent JPEG Group.
+libjpeg-turbo许可证见licenses目录。
