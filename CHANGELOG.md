@@ -2,6 +2,12 @@
 
 Release notes are generated from Git commit history by the version bump command.
 
+## [0.1.1] - 2026-10-27
+
+### Other Changes
+
+- \[doc\] Removed examples folder ([3372180](https://github.com/jinj02/exifmark/commit/33721805717ddf27bbd9e55a1359dbb8b50c8089))
+
 ## [0.1.0] - 2026-10-27
 
 ### Features
