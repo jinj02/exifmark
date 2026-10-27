@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
-import ExifyCore
+import ExifmarkCore
 import Darwin
 
 
@@ -41,7 +41,7 @@ final class CardRendererTests {
     var directory: URL!
 
     func setUpWithError() throws {
-        directory = FileManager.default.temporaryDirectory.appendingPathComponent("exify-tests-\(UUID().uuidString)")
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("exifmark-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -68,7 +68,7 @@ final class CardRendererTests {
             kCGImagePropertyTIFFDictionary as String: [
                 kCGImagePropertyTIFFMake as String: "SONY",
                 kCGImagePropertyTIFFModel as String: "ILCE-7M4",
-                kCGImagePropertyTIFFCopyright as String: "exify test copyright",
+                kCGImagePropertyTIFFCopyright as String: "exifmark test copyright",
             ],
             kCGImagePropertyExifDictionary as String: [
                 kCGImagePropertyExifDateTimeOriginal as String: "2026:10:27 09:41:30",
@@ -145,7 +145,7 @@ final class CardRendererTests {
         equal(exif[kCGImagePropertyExifDateTimeOriginal as String] as? String, "2026:10:27 09:41:30")
         let tiff = try unwrap(actual[kCGImagePropertyTIFFDictionary as String] as? [String: Any])
         equal(tiff[kCGImagePropertyTIFFModel as String] as? String, "ILCE-7M4")
-        equal(tiff[kCGImagePropertyTIFFCopyright as String] as? String, "exify test copyright")
+        equal(tiff[kCGImagePropertyTIFFCopyright as String] as? String, "exifmark test copyright")
         let iptc = try unwrap(actual[kCGImagePropertyIPTCDictionary as String] as? [String: Any])
         equal(iptc[kCGImagePropertyIPTCCaptionAbstract as String] as? String, "中文说明")
         notNil(actual[kCGImagePropertyGPSDictionary as String])
@@ -162,6 +162,40 @@ final class CardRendererTests {
         isNil(try properties(output)[kCGImagePropertyGPSDictionary as String])
     }
 
+    func testTIFFStagingPreservesMetadataAndProfile() throws {
+        let input = try fixture(profile: CGColorSpace.adobeRGB1998, gps: true)
+        let output = directory.appendingPathComponent("lossless-card.tiff")
+        let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path))
+        let actual = try properties(output)
+        equal(actual[kCGImagePropertyPixelWidth as String] as? Int, result.width)
+        equal(actual[kCGImagePropertyPixelHeight as String] as? Int, result.height)
+        let tiff = try unwrap(actual[kCGImagePropertyTIFFDictionary as String] as? [String: Any])
+        equal(tiff[kCGImagePropertyTIFFModel as String] as? String, "ILCE-7M4")
+        equal(tiff[kCGImagePropertyTIFFCopyright as String] as? String, "exifmark test copyright")
+        notNil(actual[kCGImagePropertyGPSDictionary as String])
+        let source = try unwrap(CGImageSourceCreateWithURL(output as CFURL, nil))
+        equal(CGImageSourceGetType(source).map { $0 as String }, UTType.tiff.identifier)
+        let image = try unwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        equal(image.colorSpace?.name.map { $0 as String }, CGColorSpace.adobeRGB1998 as String)
+    }
+
+    func testJPEGInstallationPreservesExactBytesAndExistingOutputOnFailure() throws {
+        let input = try fixture()
+        let jpeg = directory.appendingPathComponent("Lightroom final.jpg")
+        try CardRenderer().render(RenderRequest(input: input.path, output: jpeg.path))
+        let bytes = try Data(contentsOf: jpeg)
+        let output = directory.appendingPathComponent("成片 ' $() ` &.jpg")
+        try Data("previous output".utf8).write(to: output)
+        try JPEGInstallRequest(input: jpeg.path, output: output.path).install()
+        equal(try Data(contentsOf: output), bytes)
+        equal(try Data(contentsOf: jpeg), bytes)
+        throwsError(try JPEGInstallRequest(input: input.path, output: output.path).install())
+        throwsError(try JPEGInstallRequest(input: jpeg.path, output: jpeg.path).install())
+        throwsError(try JPEGInstallRequest(input: "/missing/file.jpg", output: output.path).install())
+        equal(try Data(contentsOf: output), bytes)
+        reject(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".exifmark-") })
+    }
+
     func testAtomicOverwriteAndSourceUnchangedWithSpecialPaths() throws {
         let fixture = try fixture()
         let input = directory.appendingPathComponent("原片 ' $() ` &.tif")
@@ -172,7 +206,7 @@ final class CardRendererTests {
         try CardRenderer().render(RenderRequest(input: input.path, output: output.path))
         equal(try Data(contentsOf: input), before)
         greater(try Data(contentsOf: output).count, 1000)
-        reject(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".exify-") })
+        reject(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".exifmark-") })
     }
 
     func testInvalidRequestsDoNotOverwriteExistingOutput() throws {
@@ -186,7 +220,7 @@ final class CardRendererTests {
         throwsError(try CardRenderer().render(RenderRequest(input: "/missing/image.tif", output: output.path)))
         equal(try Data(contentsOf: output), original)
         throwsError(try CardRenderer().render(RenderRequest(input: input.path, output: directory.appendingPathComponent("missing/photo.jpg").path)))
-        reject(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".exify-") })
+        reject(try FileManager.default.contentsOfDirectory(atPath: directory.path).contains { $0.hasPrefix(".exifmark-") })
     }
 }
 
@@ -196,6 +230,8 @@ let cases: [(String, () throws -> Void)] = [
     ("eight orientations", suite.testAllEightOrientationsAreNormalized),
     ("metadata and AdobeRGB", suite.testAllowedMetadataAndAdobeRGBProfileSurvive),
     ("stripped GPS", suite.testStrippedGPSIsNotReintroducedByVisibleFields),
+    ("lossless TIFF metadata and profile", suite.testTIFFStagingPreservesMetadataAndProfile),
+    ("JPEG bytes and failure protection", suite.testJPEGInstallationPreservesExactBytesAndExistingOutputOnFailure),
     ("atomic writes and special paths", suite.testAtomicOverwriteAndSourceUnchangedWithSpecialPaths),
     ("errors preserve output", suite.testInvalidRequestsDoNotOverwriteExistingOutput),
 ]

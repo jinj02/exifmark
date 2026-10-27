@@ -64,17 +64,26 @@ public struct CardRenderer {
         guard let card = context.makeImage() else { throw RenderError.allocation }
 
         Self.updateProperties(&properties, width: width, height: height)
-        properties[kCGImageDestinationLossyCompressionQuality as String] = request.quality
+        let isTIFF = ["tif", "tiff"].contains(outputURL.pathExtension.lowercased())
+        if isTIFF {
+            // Keep the complete card lossless for Lightroom's final JPEG export.
+            var tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+            tiff[kCGImagePropertyTIFFCompression as String] = 1 // Uncompressed RGB
+            properties[kCGImagePropertyTIFFDictionary as String] = tiff
+            properties.removeValue(forKey: kCGImageDestinationLossyCompressionQuality as String)
+        } else {
+            properties[kCGImageDestinationLossyCompressionQuality as String] = request.quality
+        }
         properties[kCGImageDestinationEmbedThumbnail as String] = false
         properties[kCGImageDestinationMergeMetadata as String] = true
         let metadata = Self.updatedMetadata(source, width: width, height: height)
 
         // A same-directory temporary file makes rename atomic, including replacement.
         let temporaryURL = outputURL.deletingLastPathComponent()
-            .appendingPathComponent(".exify-\(UUID().uuidString).jpg")
+            .appendingPathComponent(".exifmark-\(UUID().uuidString).\(outputURL.pathExtension)")
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
         guard let destination = CGImageDestinationCreateWithURL(
-            temporaryURL as CFURL, UTType.jpeg.identifier as CFString, 1, nil
+            temporaryURL as CFURL, (isTIFF ? UTType.tiff : UTType.jpeg).identifier as CFString, 1, nil
         ) else { throw RenderError.output }
         CGImageDestinationAddImageAndMetadata(destination, card, metadata, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw RenderError.output }
@@ -128,7 +137,7 @@ public struct CardRenderer {
         // Resolve beside the executable so distribution never relies on a build-machine path.
         guard let executable = Bundle.main.executableURL,
               let resources = Bundle(url: executable.deletingLastPathComponent()
-                .appendingPathComponent("ExifyRenderer_ExifyCore.bundle")),
+                .appendingPathComponent("ExifmarkRenderer_ExifmarkCore.bundle")),
               let url = resources.url(forResource: name, withExtension: "pdf"),
               let document = CGPDFDocument(url as CFURL), let page = document.page(at: 1) else {
             throw RenderError.logo

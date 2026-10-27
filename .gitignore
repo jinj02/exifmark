@@ -5,6 +5,6 @@ dist/
 test-output/
 examples/*.jpg
 examples/*.png
-exify.lrplugin/bin/
+exifmark.lrplugin/bin/
 *.lrcat*
 *.lrdata/

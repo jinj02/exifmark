@@ -66,8 +66,8 @@ public struct RenderRequest: Codable {
         let source = URL(fileURLWithPath: input).resolvingSymlinksInPath().standardizedFileURL
         let destination = URL(fileURLWithPath: output).resolvingSymlinksInPath().standardizedFileURL
         guard source != destination else { throw RenderError.invalid("输入和输出路径必须不同。") }
-        guard ["jpg", "jpeg"].contains(destination.pathExtension.lowercased()) else {
-            throw RenderError.invalid("输出文件需要使用.jpg或.jpeg扩展名。")
+        guard ["jpg", "jpeg", "tif", "tiff"].contains(destination.pathExtension.lowercased()) else {
+            throw RenderError.invalid("输出文件需要使用.tif、.tiff、.jpg或.jpeg扩展名。")
         }
     }
 }
@@ -86,8 +86,8 @@ public enum RenderError: Error, LocalizedError {
         case .input: return "无法读取输入图片，文件可能损坏或格式不受支持。"
         case .allocation: return "图片过大或可用内存不足，无法创建画布。"
         case .logo: return "SONY字标资源缺失或损坏，请重新安装完整插件。"
-        case .output: return "无法编码JPEG，请检查导出目录和可用空间。"
-        case .write(let message): return "无法保存JPEG：\(message)"
+        case .output: return "无法编码图像，请检查导出目录和可用空间。"
+        case .write(let message): return "无法保存图像：\(message)"
         }
     }
 }

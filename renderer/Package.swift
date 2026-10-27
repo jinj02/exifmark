@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "ExifyRenderer",
+    name: "ExifmarkRenderer",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "exify-render", targets: ["ExifyCLI"]),
-        .executable(name: "exify-validate", targets: ["ExifyValidation"]),
+        .executable(name: "exifmark-render", targets: ["ExifmarkCLI"]),
+        .executable(name: "exifmark-validate", targets: ["ExifmarkValidation"]),
     ],
     targets: [
-        .target(name: "ExifyCore", resources: [.process("Resources")]),
-        .executableTarget(name: "ExifyCLI", dependencies: ["ExifyCore"]),
-        .executableTarget(name: "ExifyValidation", dependencies: ["ExifyCore"], path: "Tests/ExifyValidation"),
+        .target(name: "ExifmarkCore", resources: [.process("Resources")]),
+        .executableTarget(name: "ExifmarkCLI", dependencies: ["ExifmarkCore"]),
+        .executableTarget(name: "ExifmarkValidation", dependencies: ["ExifmarkCore"], path: "Tests/ExifmarkValidation"),
     ]
 )

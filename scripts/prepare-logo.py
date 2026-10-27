@@ -20,7 +20,7 @@ for element in svg.iter('{http://www.w3.org/2000/svg}path'):
         elif operation == 'closePath': commands.append('h')
         else: raise ValueError(f'Unsupported vector operation: {operation}')
 
-resource = root / 'renderer/Sources/ExifyCore/Resources'
+resource = root / 'renderer/Sources/ExifmarkCore/Resources'
 resource.mkdir(parents=True, exist_ok=True)
 for name, fill in [('black', 0), ('white', 1)]:
     stream = (f'q\n1 0 0 -1 0 {height:.6f} cm\n{fill} g\n'

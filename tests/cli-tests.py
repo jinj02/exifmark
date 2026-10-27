@@ -8,7 +8,7 @@ import tempfile
 from PIL import Image, ImageChops, ImageOps, ImageStat
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = ROOT / 'exify.lrplugin/bin/exify-render'
+BINARY = ROOT / 'exifmark.lrplugin/bin/exifmark-render'
 checks = 0
 
 
@@ -74,7 +74,7 @@ def check_borders(image, photo_width, photo_height, border, background):
         check(all(abs(mean - background) < 4 for mean in means), 'Wrong border background or photo position')
 
 
-with tempfile.TemporaryDirectory(prefix='exify-cli-') as folder:
+with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
     directory = Path(folder)
     original = Image.new('RGB', (320, 240))
     original.paste((210, 30, 20), (0, 0, 160, 120))
@@ -152,5 +152,44 @@ with tempfile.TemporaryDirectory(prefix='exify-cli-') as folder:
     request = directory / 'invalid.json'; request.write_text('{broken')
     result = subprocess.run([str(BINARY), '--request', str(request)], capture_output=True)
     check(result.returncode != 0, 'Invalid JSON accepted')
-    check(not list(directory.glob('.exify-*.jpg')), 'Leaked intermediate output')
+    check(not list(directory.glob('.exifmark-*.jpg')), 'Leaked intermediate output')
+    # The card reaches Lightroom as lossless RGB, regardless of the JPEG quality setting.
+    pixels = bytes((i * 73 + i // 17 * 41) % 256 for i in range(511 * 383 * 3))
+    uncompressed = Image.frombytes('RGB', (511, 383), pixels)
+    source = directory / 'lossless-source.tif'
+    uncompressed.save(source, compression='tiff_lzw')
+    for layout in ['bordered', 'bottomOnly']:
+        for theme, gray in [('white', 255), ('black', 0)]:
+            for quality in [0, 1]:
+                output = directory / f'lossless-{layout}-{theme}-{quality}.tif'
+                result = render(directory, source, output, theme=theme, quality=quality, layout=layout)
+                check(result.returncode == 0, result.stderr)
+                with Image.open(output) as actual:
+                    size, border, footer = layout_dimensions(511, 383, layout)
+                    check(actual.format == 'TIFF', 'Staging file must be a real TIFF')
+                    check(actual.size == size, 'Wrong TIFF canvas dimensions')
+                    check(actual.tag_v2.get(259) in [1, 5, 8, 32946], 'Lossy TIFF compression used')
+                    crop = actual.crop((border, border, border + 511, border + 383)).convert('RGB')
+                    check(crop.tobytes() == pixels, 'TIFF staging changed photo pixels')
+                    check_borders(actual.convert('RGB'), 511, 383, border, gray)
+
+    # Installing the final JPEG preserves its encoding, quantization, EXIF and ICC bytes.
+    final = directory / 'lightroom-final.jpg'
+    exif = Image.Exif(); exif[270] = 'preserve final JPEG bytes'
+    uncompressed.save(final, quality=73, progressive=True, exif=exif)
+    final_bytes = final.read_bytes()
+    output = directory / "installed ' $() ` &.jpg"
+    output.write_bytes(b'previous output')
+    path = directory / 'install.json'
+    path.write_text(json.dumps(dict(input=str(final), output=str(output))))
+    result = subprocess.run([str(BINARY), '--install-jpeg', str(path)], capture_output=True, text=True)
+    check(result.returncode == 0, result.stderr)
+    check(output.read_bytes() == final_bytes, 'Lightroom JPEG was re-encoded')
+    check(final.read_bytes() == final_bytes, 'Lightroom source JPEG changed')
+    for invalid in [source, directory / 'missing.jpg']:
+        path.write_text(json.dumps(dict(input=str(invalid), output=str(output))))
+        result = subprocess.run([str(BINARY), '--install-jpeg', str(path)], capture_output=True)
+        check(result.returncode != 0, 'Invalid final JPEG accepted')
+        check(output.read_bytes() == final_bytes, 'Failed install changed existing output')
+    check(not list(directory.glob('.exifmark-*')), 'Leaked intermediate image')
 print(f'CLI validation: {checks} assertions passed')
