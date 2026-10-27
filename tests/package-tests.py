@@ -1,21 +1,50 @@
 #!/usr/bin/env python3
 """Unpack and run the actual deliverable from a separate directory."""
+import argparse
+import hashlib
 import json
+import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 from PIL import Image
 
 root = Path(__file__).resolve().parents[1]
-archive = root / 'dist/exifmark-0.1.0-macos.zip'
+sys.path.insert(0, str(root / 'scripts'))
+from release import cli_version, parse_version, source_version
+
+parser = argparse.ArgumentParser(description='Verify the actual plugin ZIP')
+parser.add_argument('archive', type=Path)
+archive = parser.parse_args().archive.resolve()
+assert archive.is_file(), f'Missing package: {archive}'
+checksum_path = archive.with_suffix('.zip.sha256')
+assert checksum_path.is_file(), f'Missing checksum: {checksum_path}'
+assert checksum_path.read_text() == f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n'
 with zipfile.ZipFile(archive) as package:
     executable = package.getinfo('exifmark.lrplugin/bin/exifmark-render')
     assert (executable.external_attr >> 16) & 0o111, 'Executable permission missing from ZIP'
     assert all(p.filename.startswith('exifmark.lrplugin/') for p in package.infolist())
+    assert all('..' not in Path(p.filename).parts for p in package.infolist())
     assert not any('__MACOSX' in p.filename or '.DS_Store' in p.filename for p in package.infolist())
-    assert 'exifmark.lrplugin/licenses/libjpeg-turbo-LICENSE.md' in package.namelist()
+    required = {
+        'Info.lua', 'ExportFilter.lua', 'Metadata.lua', 'Settings.lua', 'Json.lua', 'PluginInfo.lua',
+        'README.txt', 'NOTICE.txt', 'licenses/libjpeg-turbo-LICENSE.md', 'licenses/README.ijg',
+        'bin/exifmark-render', 'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-white.pdf',
+        'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-black.pdf', 'build-info.json',
+    }
+    assert {'exifmark.lrplugin/' + name for name in required} <= set(package.namelist())
+    information = json.loads(package.read('exifmark.lrplugin/build-info.json'))
+    packaged_version = parse_version(package.read('exifmark.lrplugin/Info.lua').decode())
+    assert packaged_version[:3] == source_version(root)
+    assert packaged_version[3] == information['build'] > 0
+    assert information['version'] == '.'.join(map(str, packaged_version[:3]))
+    assert information['short_commit'] == information['commit'][:12]
+    assert information['archive'] == archive.name
+    assert information['commit'] == subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    assert information['build'] == int(subprocess.check_output(['git', '-C', str(root), 'rev-list', '--count', 'HEAD'], text=True))
 
 with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     directory = Path(folder)
@@ -24,7 +53,9 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     subprocess.run(['/usr/bin/codesign', '--verify', '--strict', str(binary)], check=True)
     architectures = subprocess.check_output(['/usr/bin/lipo', '-archs', str(binary)], text=True)
     assert 'arm64' in architectures and 'x86_64' in architectures
-    subprocess.run([str(binary), '--version'], check=True, capture_output=True)
+    assert platform.machine() in architectures
+    actual_version = subprocess.check_output([str(binary), '--version'], text=True).strip()
+    assert actual_version == cli_version(information), actual_version
     source = directory / 'source.tif'; Image.new('RGB', (480,320), (60,100,140)).save(source)
     request = dict(version=1, input=str(source), output=str(directory/'result.jpg'), theme='white',
                    camera='ILCE-7M4', lens='FE 35mm F1.8 · 35mm', exposure='f/2.8 · 1/250s · ISO 100',
@@ -53,4 +84,4 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 1 and 'SONY' in result.stderr, result.stderr
     assert not (directory/'missing-logo.jpg').exists()
-print('Package validation: signatures, both architectures, relocated render and missing resources passed')
+print(f'Package validation: {platform.machine()}, version, checksum, signatures, both architectures, relocated render and missing resources passed')

@@ -6,5 +6,6 @@ test-output/
 examples/*.jpg
 examples/*.png
 exifmark.lrplugin/bin/
+renderer/Sources/ExifmarkCLI/GeneratedBuildInfo.swift
 *.lrcat*
 *.lrdata/

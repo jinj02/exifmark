@@ -4,7 +4,7 @@
 
 **为 Lightroom Classic 导出的照片自动生成 EXIF 参数边框卡片**
 
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/jinj02/exifmark/releases)
+[![Release](https://img.shields.io/github/v/release/jinj02/exifmark)](https://github.com/jinj02/exifmark/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/jinj02/exifmark/ci.yml?label=CI&logo=github)](https://github.com/jinj02/exifmark/actions)
 [![Platform](https://img.shields.io/badge/macOS-13.0%2B-000000.svg?logo=apple&logoColor=white)](https://github.com/jinj02/exifmark)
 [![Lightroom Classic](https://img.shields.io/badge/Lightroom%20Classic-14.3%2B-31A8FF.svg?logo=adobelightroomclassic&logoColor=white)](https://github.com/jinj02/exifmark)
@@ -45,7 +45,7 @@
 
 ### 1. 安装插件
 
-1. 解压发布包 `dist/exifmark-0.1.0-macos.zip`（或自行构建），将完整的 `exifmark.lrplugin` 文件夹移动到固定目录（如 `~/Documents/LightroomPlugins/`，请勿删改其中的 `bin` 目录）。
+1. 从[Releases](https://github.com/jinj02/exifmark/releases)下载`exifmark-<版本>-macos.zip`，解压后将完整的`exifmark.lrplugin`文件夹移动到固定目录（如`~/Documents/LightroomPlugins/`，请保留完整的`bin`目录）。开发包在[Actions](https://github.com/jinj02/exifmark/actions/workflows/ci.yml)的成功运行页面下载；首次正式版为`0.1.0`。
 2. 打开 Lightroom Classic，在顶部菜单栏选择 **文件 → 增效工具管理器...**（快捷键 `⌘` + `⌥` + `⇧` + `,`）。
 3. 点击左下角的 **添加**，选中刚才放置的 `exifmark.lrplugin` 文件夹并确认。
 
@@ -85,12 +85,41 @@
 # 1. 编译 arm64 + x86_64 通用二进制渲染器，并写入 exifmark.lrplugin/bin/
 ./scripts/build.sh
 
-# 2. 打包生成可分发的 dist/exifmark-0.1.0-macos.zip
+# 2. 构建并打包，输出实际ZIP路径，同时生成.zip.sha256校验文件
 ./scripts/package.sh
+
+# 3. 验证本次开发安装包；可将实际ZIP路径作为第一个参数传入
+./scripts/test.sh
 ```
+
+开发包名称包含版本、Git提交数生成的build号和短commit SHA，例如`exifmark-<版本>-build<编号>-<SHA>-macos.zip`。ZIP内顶层仅有`exifmark.lrplugin`，包含完整运行依赖。打包时在暂存目录生成实际插件版本及`build-info.json`，已跟踪源码保持干净。
+
+测试依赖Python3.10+与`tests/requirements.txt`中的Pillow。测试脚本会下载固定版本的Lua5.1.5，校验SHA-256后在`.build/`内编译；也可通过`EXIFMARK_LUA=/path/to/lua5.1`指定已有解释器。
 
 > [!NOTE]
 > 构建脚本默认执行本地临时签名（Ad-hoc signing），尚未进行 Apple Developer ID 签名与公证（Notarization）。
+
+### 版本管理与发布
+
+主分支统一为`main`。`exifmark.lrplugin/Info.lua`中的`major.minor.revision`是唯一版本来源；源码build字段为占位值0，实际build采用完整Git历史的提交数，同一提交重复构建时保持一致。CLI的`--version`输出版本、build和commit；渲染请求中的`version = 1`独立表示协议版本。
+
+升版前先同步主分支与tag，并提交功能变更，然后运行：
+
+```bash
+# 首次正式升版：0.0.0 → 0.1.0
+python3 scripts/release.py bump minor
+
+# 后续修复、功能和主版本升级分别使用patch、minor、major
+python3 scripts/release.py bump patch
+```
+
+命令修改插件版本并更新`CHANGELOG.md`，生成的变更可先审阅、补充说明，再以`chore(release): <版本>`提交。首次更新文档涵盖全部提交，后续涵盖上次正式tag以来的提交；兼容`[feat]`、`[fix]`和`feat:`、`fix:`等格式，按中文标题分类，保留提交原文及链接，并忽略merge和升版提交。
+
+PR、推送`main`和手动触发都会运行CI。CI在Apple Silicon构建双架构插件并运行完整自动测试，再将同一份ZIP交给Intel运行器验证。ZIP和SHA-256校验文件在Actions保存14天。`0.0.0`、PR和手动运行提供开发包；`main`上的正式版本升级push通过全部检查后，自动创建`v<版本>`tag和GitHub Release，发布说明来自对应的CHANGELOG章节。
+
+发布先创建草稿、上传插件ZIP和校验文件，最后公开。上传失败后可重跑原工作流补齐；已完成的相同版本、相同提交会跳过，已绑定其他提交的tag会报错。Release使用工作流自带的`GITHUB_TOKEN`，发布任务具有`contents: write`权限。GitHub自动附带的源码存档保留，安装时请选择插件ZIP附件。
+
+版本与发布测试可单独运行`python3 tests/release-tests.py`。正式安装包可用`./scripts/package.sh --release`在本地生成，再将输出路径传给测试脚本。
 
 ### 目录结构
 

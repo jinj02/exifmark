@@ -5,7 +5,7 @@ import Foundation
 func run() throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     if arguments == ["--version"] {
-        print("exifmark-render 0.1.0 (request v1)")
+        print(BuildInfo.description)
         return
     }
     guard arguments.count == 2, ["--request", "--install-jpeg"].contains(arguments[0]) else {

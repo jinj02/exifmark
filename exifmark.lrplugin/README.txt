@@ -1,4 +1,4 @@
-exifmark 0.1.0
+exifmark
 
 安装：LrC菜单“文件→增效工具管理器→添加”，选择整个exifmark.lrplugin文件夹。
 使用：在导出窗口左下“后期处理动作”中展开exifmark，双击“exifmark照片卡片”。
