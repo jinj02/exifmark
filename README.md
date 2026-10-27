@@ -8,7 +8,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/jinj02/exifmark/ci.yml?label=CI&logo=github)](https://github.com/jinj02/exifmark/actions)
 [![Platform](https://img.shields.io/badge/macOS-13.0%2B-000000.svg?logo=apple&logoColor=white)](https://github.com/jinj02/exifmark)
 [![Lightroom Classic](https://img.shields.io/badge/Lightroom%20Classic-14.3%2B-31A8FF.svg?logo=adobelightroomclassic&logoColor=white)](https://github.com/jinj02/exifmark)
-[![License](https://img.shields.io/github/license/jinj02/exifmark)](https://github.com/jinj02/exifmark/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/jinj02/exifmark/blob/main/LICENSE)
 [![Stars](https://img.shields.io/github/stars/jinj02/exifmark?style=social)](https://github.com/jinj02/exifmark/stargazers)
 
 </div>
