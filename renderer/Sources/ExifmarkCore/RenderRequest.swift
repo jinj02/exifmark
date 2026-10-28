@@ -1,7 +1,11 @@
 import Foundation
 
 public enum Theme: String, Codable {
-    case white, black
+    case white, black, blurred
+}
+
+public enum WatermarkStyle: String, Codable {
+    case detailed, centered
 }
 
 public enum Layout: String, Codable {
@@ -14,11 +18,13 @@ public struct RenderRequest: Codable {
     public var output: String
     public var theme: Theme
     public var layout: Layout
+    public var watermarkStyle: WatermarkStyle
     public var cameraMake: String
     public var camera: String
     public var cameraNameStyle: CameraNameStyle
     public var cameraCustomName: String
     public var lens: String
+    public var focalLength: String
     public var exposure: String
     public var capturedAt: String
     // JPEG inputs retain their own quantization tables; this value applies to other inputs.
@@ -27,17 +33,20 @@ public struct RenderRequest: Codable {
     public init(input: String, output: String, theme: Theme = .white, layout: Layout = .bordered,
                 cameraMake: String = "", camera: String = "", lens: String = "", exposure: String = "",
                 capturedAt: String = "", quality: Double = 0.9,
-                cameraNameStyle: CameraNameStyle = .common, cameraCustomName: String = "") {
+                cameraNameStyle: CameraNameStyle = .common, cameraCustomName: String = "",
+                watermarkStyle: WatermarkStyle = .detailed, focalLength: String = "") {
         self.version = 1
         self.input = input
         self.output = output
         self.theme = theme
         self.layout = layout
+        self.watermarkStyle = watermarkStyle
         self.cameraMake = cameraMake
         self.camera = camera
         self.cameraNameStyle = cameraNameStyle
         self.cameraCustomName = cameraCustomName
         self.lens = lens
+        self.focalLength = focalLength
         self.exposure = exposure
         self.capturedAt = capturedAt
         self.quality = quality
@@ -46,6 +55,7 @@ public struct RenderRequest: Codable {
     private enum CodingKeys: String, CodingKey {
         case version, input, output, theme, layout, cameraMake, camera, lens, exposure, capturedAt, quality
         case cameraNameStyle, cameraCustomName
+        case watermarkStyle, focalLength
     }
 
     public init(from decoder: Decoder) throws {
@@ -55,11 +65,13 @@ public struct RenderRequest: Codable {
         output = try values.decode(String.self, forKey: .output)
         theme = try values.decode(Theme.self, forKey: .theme)
         layout = try values.decodeIfPresent(Layout.self, forKey: .layout) ?? .bordered
+        watermarkStyle = try values.decodeIfPresent(WatermarkStyle.self, forKey: .watermarkStyle) ?? .detailed
         cameraMake = try values.decodeIfPresent(String.self, forKey: .cameraMake) ?? ""
         camera = try values.decode(String.self, forKey: .camera)
         cameraNameStyle = try values.decodeIfPresent(CameraNameStyle.self, forKey: .cameraNameStyle) ?? .common
         cameraCustomName = try values.decodeIfPresent(String.self, forKey: .cameraCustomName) ?? ""
         lens = try values.decode(String.self, forKey: .lens)
+        focalLength = try values.decodeIfPresent(String.self, forKey: .focalLength) ?? ""
         exposure = try values.decode(String.self, forKey: .exposure)
         capturedAt = try values.decode(String.self, forKey: .capturedAt)
         quality = try values.decode(Double.self, forKey: .quality)

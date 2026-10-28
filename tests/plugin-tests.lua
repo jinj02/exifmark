@@ -23,6 +23,7 @@ local fields = Metadata.read(photo)
 equal(fields.cameraMake, 'SONY')
 equal(fields.camera, 'ILCE-7M4')
 equal(fields.lens, 'FE 24-70mm F2.8 GM II · 35mm')
+equal(fields.focalLength, '35mm')
 equal(fields.exposure, 'f/2.8 · 1/250s · ISO 100')
 equal(fields.capturedAt, '2026.10.27 09:41')
 local originalMake, originalModel = raw.cameraMake, formatted.cameraModel
@@ -35,7 +36,10 @@ raw.cameraMake, formatted.cameraMake = nil, ' Canon '
 equal(Metadata.read(photo).cameraMake, ' Canon ')
 raw.cameraMake, formatted.cameraMake = originalMake, nil
 local missing = Metadata.read({getRawMetadata = function() error('missing') end, getFormattedMetadata = function() end})
-for _, key in ipairs({'cameraMake','camera','lens','exposure','capturedAt'}) do equal(missing[key], '') end
+for _, key in ipairs({'cameraMake','camera','lens','focalLength','exposure','capturedAt'}) do equal(missing[key], '') end
+raw.focalLength = 54.5; equal(Metadata.read(photo).focalLength, '54.5mm')
+raw.focalLength = -1; equal(Metadata.read(photo).focalLength, '')
+raw.focalLength = 35
 raw.aperture, raw.shutterSpeed = nil, nil
 equal(Metadata.read(photo).exposure, 'ISO 100')
 raw.aperture, raw.shutterSpeed = 2.8, 1/250
@@ -47,7 +51,8 @@ equal(Settings.error(valid, true, true), nil)
 equal(Settings.error(valid, false, true) ~= nil, true)
 equal(Settings.error(valid, true, false) ~= nil, true)
 for key, value in pairs({LR_format='TIFF', LR_enableHDRDisplay=true, LR_jpeg_useLimitSize=true,
-    exifmark_theme='invalid', exifmark_layout='invalid', exifmark_cameraNameStyle='invalid'}) do
+    exifmark_theme='invalid', exifmark_layout='invalid', exifmark_cameraNameStyle='invalid',
+    exifmark_watermarkStyle='invalid'}) do
     local p = {}; for k,v in pairs(valid) do p[k] = v end; p[key] = value
     equal(Settings.error(p, true, true) ~= nil, true)
 end
@@ -117,6 +122,7 @@ function props:removeObserver(key) self.callbacks[key]=nil end
 Filter.startDialog(props)
 equal(props.exifmark_theme,'white'); equal(props.LR_cantExportBecause,nil)
 equal(props.exifmark_layout,'bordered')
+equal(props.exifmark_watermarkStyle,'detailed')
 equal(props.exifmark_cameraNameStyle,'common'); equal(props.exifmark_cameraCustomName,nil)
 equal(props.callbacks.exifmark_cameraCustomName,nil)
 for _, field in ipairs(Filter.exportPresetFields) do
@@ -124,6 +130,7 @@ for _, field in ipairs(Filter.exportPresetFields) do
 end
 -- Simulate Lightroom saving each declared preset field and restoring a fresh dialog.
 props.exifmark_cameraNameStyle = 'exif'
+props.exifmark_theme = 'blurred'; props.exifmark_watermarkStyle = 'centered'
 local saved = {}
 for _, field in ipairs(Filter.exportPresetFields) do
     saved[field.key] = props[field.key] == nil and field.default or props[field.key]
@@ -133,7 +140,16 @@ saved.addObserver, saved.removeObserver = props.addObserver, props.removeObserve
 saved.LR_format = 'JPEG'
 Filter.startDialog(saved)
 equal(saved.exifmark_cameraNameStyle,'exif'); equal(saved.exifmark_cameraCustomName,nil)
+equal(saved.exifmark_theme,'blurred'); equal(saved.exifmark_watermarkStyle,'centered')
+equal(saved.exifmark_synopsis,'原图模糊边框 · 简洁水印')
+equal(saved.LR_cantExportBecause,nil)
+equal(saved.exifmark_status:find('自动选择黑字或白字',1,true) ~= nil,true)
 Filter.endDialog(saved)
+props.exifmark_theme = 'white'; props.exifmark_watermarkStyle = 'detailed'
+props.exifmark_watermarkStyle='invalid'; props.callbacks.exifmark_watermarkStyle()
+equal(props.LR_cantExportBecause ~= nil,true)
+props.exifmark_watermarkStyle='centered'; props.callbacks.exifmark_watermarkStyle()
+equal(props.LR_cantExportBecause,nil)
 props.exifmark_cameraNameStyle = 'common'
 props.exifmark_cameraNameStyle='invalid'; props.callbacks.exifmark_cameraNameStyle()
 equal(props.LR_cantExportBecause ~= nil,true)
@@ -168,6 +184,8 @@ local function runExport(options)
     end
     local exportProperties = {}; for key,value in pairs(valid) do exportProperties[key]=value end
     exportProperties.exifmark_layout = options.layout
+    exportProperties.exifmark_theme = options.theme or 'white'
+    exportProperties.exifmark_watermarkStyle = options.watermarkStyle
     exportProperties.exifmark_cameraNameStyle = options.cameraNameStyle
     exportProperties.exifmark_cameraCustomName = options.cameraCustomName
     exportProperties.LR_jpeg_quality=options.quality or 0.9
@@ -217,6 +235,8 @@ equal(executionCount,3)
 equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=0.9 + compressed footer')
 equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
 equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
+equal(requestPayload:find('"watermarkStyle":"detailed"',1,true) ~= nil,true)
+equal(requestPayload:find('"focalLength":"35mm"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraMake":"SONY"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraNameStyle":"common"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraCustomName"',1,true),nil)
@@ -229,6 +249,10 @@ equal(requestPayload:find('"camera":"ILCE-7M4"',1,true) ~= nil,true)
 destinations=runExport({layout='bottomOnly'})
 for _,d in ipairs(destinations) do equal(d.ok,true) end
 equal(requestPayload:find('"layout":"bottomOnly"',1,true) ~= nil,true)
+destinations=runExport({theme='blurred',watermarkStyle='centered'})
+for _,d in ipairs(destinations) do equal(d.ok,true) end
+equal(requestPayload:find('"theme":"blurred"',1,true) ~= nil,true)
+equal(requestPayload:find('"watermarkStyle":"centered"',1,true) ~= nil,true)
 destinations=runExport({upstreamFailure=true})
 equal(destinations[1].ok,true); equal(destinations[2].ok,false); equal(destinations[3].ok,true); equal(executionCount,2)
 destinations=runExport({fail=true})

@@ -22,4 +22,5 @@ else
     exit 1
 fi
 python3 "$PROJECT_ROOT/tests/cli-tests.py"
+python3 "$PROJECT_ROOT/tests/style-tests.py"
 python3 "$PROJECT_ROOT/tests/package-tests.py" "$ARCHIVE"

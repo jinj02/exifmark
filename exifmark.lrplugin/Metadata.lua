@@ -46,8 +46,8 @@ function Metadata.read(photo, protectedCall, fallbackDate)
 
     local lens = formatted('lens')
     local focalLength = positive(raw('focalLength'))
+    local focal = focalLength and (number(focalLength) .. 'mm') or ''
     if focalLength then
-        local focal = number(focalLength) .. 'mm'
         lens = lens ~= '' and (lens .. ' · ' .. focal) or focal
     end
 
@@ -79,6 +79,7 @@ function Metadata.read(photo, protectedCall, fallbackDate)
         cameraMake = type(make) == 'string' and make or '',
         camera = type(model) == 'string' and model or '',
         lens = lens,
+        focalLength = focal,
         exposure = table.concat(exposure, ' · '),
         capturedAt = capturedAt,
     }

@@ -19,9 +19,15 @@ end
 
 local function updateStatus(properties)
     local reason = compatibilityError(properties)
+    local borderName = ({ white = '白色边框', black = '黑色边框', blurred = '原图模糊边框' })[properties.exifmark_theme]
+    local watermarkName = properties.exifmark_watermarkStyle == 'centered' and '简洁水印' or '详细水印'
+    properties.exifmark_synopsis = (borderName or '') .. ' · ' .. watermarkName
     properties.exifmark_status = reason or (properties.exifmark_layout == 'bottomOnly'
         and '底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。保留照片压缩数据。'
         or '上、左、右各留白2%，底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。')
+    if not reason and properties.exifmark_theme == 'blurred' then
+        properties.exifmark_status = properties.exifmark_status .. '原图模糊背景，整条水印自动选择黑字或白字。'
+    end
     -- Do not overwrite a validation error owned by another export provider.
     local previous = dialogObservers[properties]
     if reason and (properties.LR_cantExportBecause == nil or properties.LR_cantExportBecause == previous) then
@@ -35,6 +41,7 @@ end
 function Filter.startDialog(properties)
     if properties.exifmark_theme == nil then properties.exifmark_theme = 'white' end
     if properties.exifmark_layout == nil then properties.exifmark_layout = 'bordered' end
+    if properties.exifmark_watermarkStyle == nil then properties.exifmark_watermarkStyle = 'detailed' end
     if properties.exifmark_cameraNameStyle == nil then properties.exifmark_cameraNameStyle = 'common' end
     for _, key in ipairs(Settings.observedKeys) do
         properties:addObserver(key, Filter, function() updateStatus(properties) end)
@@ -53,14 +60,27 @@ function Filter.sectionForFilterInDialog(f, properties)
     return {
         title = 'exifmark照片卡片',
         bind_to_object = properties,
-        synopsis = LrView.bind { key = 'exifmark_theme', object = properties,
-            transform = function(value) return value == 'black' and '黑色信息带' or '白色信息带' end },
+        synopsis = LrView.bind { key = 'exifmark_synopsis', object = properties },
         f:row {
-            f:static_text { title = '背景颜色：' },
+            f:static_text { title = '边框样式：' },
             f:popup_menu {
                 value = LrView.bind 'exifmark_theme',
-                items = { { title = '白色', value = 'white' }, { title = '黑色', value = 'black' } },
+                items = {
+                    { title = '白色', value = 'white' }, { title = '黑色', value = 'black' },
+                    { title = '原图模糊', value = 'blurred' },
+                },
                 width_in_chars = 12,
+            },
+        },
+        f:row {
+            f:static_text { title = '水印样式：' },
+            f:popup_menu {
+                value = LrView.bind 'exifmark_watermarkStyle',
+                items = {
+                    { title = '详细（左右排版）', value = 'detailed' },
+                    { title = '简洁（居中两行）', value = 'centered' },
+                },
+                width_in_chars = 20,
             },
         },
         f:row {
@@ -84,7 +104,7 @@ function Filter.sectionForFilterInDialog(f, properties)
         },
         f:static_text {
             title = LrView.bind 'exifmark_status',
-            width_in_chars = 48, height_in_lines = 2, wrap = true,
+            width_in_chars = 48, height_in_lines = 3, wrap = true,
         },
     }
 end
@@ -156,9 +176,11 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                     output = destination.destinationPath,
                     theme = properties.exifmark_theme,
                     layout = properties.exifmark_layout or 'bordered',
+                    watermarkStyle = properties.exifmark_watermarkStyle or 'detailed',
                     cameraMake = fields.cameraMake, camera = fields.camera, lens = fields.lens,
                     cameraNameStyle = properties.exifmark_cameraNameStyle or 'common',
                     exposure = fields.exposure, capturedAt = fields.capturedAt,
+                    focalLength = fields.focalLength,
                     quality = properties.LR_jpeg_quality or 0.9,
                 })
                 progress:setCaption(LrPathUtils.leafName(destination.destinationPath))
@@ -183,5 +205,6 @@ Filter.exportPresetFields = {
     { key = 'exifmark_theme', default = 'white' },
     { key = 'exifmark_layout', default = 'bordered' },
     { key = 'exifmark_cameraNameStyle', default = 'common' },
+    { key = 'exifmark_watermarkStyle', default = 'detailed' },
 }
 return Filter

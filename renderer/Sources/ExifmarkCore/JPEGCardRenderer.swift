@@ -50,11 +50,13 @@ extension CardRenderer {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
         ), let pixels = context.data else { throw RenderError.allocation }
-        context.setFillColor(gray: request.theme == .white ? 1 : 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: rawWidth, height: rawHeight))
         context.concatenate(transform)
+        let background = try CardBackground(source: source, theme: request.theme, width: width, height: height,
+                                            photoWidth: photoWidth, colorSpace: colorSpace)
+        background.draw(in: context, theme: request.theme)
         context.translateBy(x: CGFloat(borderX), y: 0)
-        try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request, properties: properties)
+        try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request,
+                       properties: properties, background: background, offsetX: CGFloat(borderX))
 
         let outputURL = URL(fileURLWithPath: request.output)
         let directory = outputURL.deletingLastPathComponent()

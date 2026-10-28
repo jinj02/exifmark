@@ -134,6 +134,17 @@ final class CardRendererTests {
         {"version":1,"input":"/source.tif","output":"/output.jpg","theme":"white",        "camera":"ILCE-7M4","lens":"","exposure":"","capturedAt":"","quality":0.9}
         """
         equal(try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.utf8)).cameraMake, "")
+        let decoded = try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.utf8))
+        equal(decoded.watermarkStyle, .detailed)
+        equal(decoded.focalLength, "")
+        var modern = decoded
+        modern.theme = .blurred
+        modern.watermarkStyle = .centered
+        modern.focalLength = "54mm"
+        let roundTrip = try JSONDecoder().decode(RenderRequest.self, from: JSONEncoder().encode(modern))
+        equal(roundTrip.theme, .blurred)
+        equal(roundTrip.watermarkStyle, .centered)
+        equal(roundTrip.focalLength, "54mm")
     }
 
     func testCameraNames() throws {
@@ -218,7 +229,15 @@ final class CardRendererTests {
             let label = brand.displayName
             equal(names.watermarkName(make: brand.rawValue, model: "Camera X"), label + " Camera X")
             equal(names.watermarkName(make: brand.rawValue, model: label + " Camera X"), label + " Camera X")
+            equal(names.compactWatermarkName(make: brand.rawValue, model: label + " Camera X"), "Camera X")
+            equal(names.compactWatermarkName(make: brand.rawValue, model: label + " Camera X", style: .exif), "Camera X")
         }
+        equal(names.compactWatermarkName(make: "SONY", model: "ILCE-7RM4A"), "α7R IVA")
+        equal(names.compactWatermarkName(make: "NIKON CORPORATION", model: "NIKON Z 99"), "Z 99")
+        equal(names.compactWatermarkName(make: "NIKON CORPORATION", model: "NIKON CORPORATION Z 99"), "Z 99")
+        equal(names.compactWatermarkName(make: "Canon", model: "Canonical Camera X"), "Canonical Camera X")
+        equal(names.compactWatermarkName(make: "Unknown", model: "Camera X"), "Camera X")
+        equal(names.compactWatermarkName(make: "SONY", model: "ILCE-7M4", customName: "SONY 自定义"), "SONY 自定义")
     }
 
     func testSonyCameraNameRules() throws {
@@ -349,6 +368,31 @@ final class CardRendererTests {
         equal(image.colorSpace?.name.map { $0 as String }, CGColorSpace.adobeRGB1998 as String)
     }
 
+    func testBlurredMetadataAndProfiles() throws {
+        for style in [WatermarkStyle.detailed, .centered] {
+            let input = try fixture(profile: CGColorSpace.adobeRGB1998, gps: true)
+            let bitmap = directory.appendingPathComponent("blurred-\(style.rawValue).jpg")
+            let jpeg = directory.appendingPathComponent("blurred-\(style.rawValue)-coefficients.jpg")
+            try CardRenderer().render(RenderRequest(input: input.path, output: bitmap.path, theme: .blurred,
+                camera: "ILCE-7M4", watermarkStyle: style, focalLength: "54mm"))
+            try CardRenderer().render(RenderRequest(input: bitmap.path, output: jpeg.path, theme: .blurred,
+                camera: "ILCE-7M4", watermarkStyle: style, focalLength: "54mm"))
+            for output in [bitmap, jpeg] {
+                let actual = try properties(output)
+                notNil(actual[kCGImagePropertyGPSDictionary as String])
+                let tiff = try unwrap(actual[kCGImagePropertyTIFFDictionary as String] as? [String: Any])
+                equal(tiff[kCGImagePropertyTIFFCopyright as String] as? String, "exifmark test copyright")
+                let source = try unwrap(CGImageSourceCreateWithURL(output as CFURL, nil))
+                let image = try unwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+                equal(image.colorSpace?.name.map { $0 as String }, CGColorSpace.adobeRGB1998 as String)
+            }
+            let stripped = try fixture()
+            try CardRenderer().render(RenderRequest(input: stripped.path, output: bitmap.path, theme: .blurred,
+                camera: "SONY", capturedAt: "2026.10.28 09:41", watermarkStyle: style, focalLength: "54mm"))
+            isNil(try properties(bitmap)[kCGImagePropertyGPSDictionary as String])
+        }
+    }
+
     func testJPEGInstallationPreservesExactBytesAndExistingOutputOnFailure() throws {
         let input = try fixture()
         let jpeg = directory.appendingPathComponent("Lightroom final.jpg")
@@ -406,6 +450,7 @@ let cases: [(String, () throws -> Void)] = [
     ("metadata and AdobeRGB", suite.testAllowedMetadataAndAdobeRGBProfileSurvive),
     ("stripped GPS", suite.testStrippedGPSIsNotReintroducedByVisibleFields),
     ("lossless TIFF metadata and profile", suite.testTIFFStagingPreservesMetadataAndProfile),
+    ("blurred styles preserve metadata and profiles", suite.testBlurredMetadataAndProfiles),
     ("JPEG bytes and failure protection", suite.testJPEGInstallationPreservesExactBytesAndExistingOutputOnFailure),
     ("atomic writes and special paths", suite.testAtomicOverwriteAndSourceUnchangedWithSpecialPaths),
     ("errors preserve output", suite.testInvalidRequestsDoNotOverwriteExistingOutput),

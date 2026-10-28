@@ -99,6 +99,24 @@ public struct CameraNames {
         return prefix + " " + text
     }
 
+    /// The centered watermark already identifies the manufacturer with its logo.
+    public func compactWatermarkName(make: String, model: String, style: CameraNameStyle = .common,
+                                     customName: String = "") -> String {
+        let camera = displayName(make: make, model: model, style: style, customName: customName)
+        guard Self.singleLine(customName).isEmpty,
+              let brand = CameraBrand.resolve(make: make, model: model) else { return camera }
+        let words = camera.split(whereSeparator: { $0.isWhitespace })
+        // Match whole leading words so model names containing a brand substring remain intact.
+        let prefixes = [make, brand.displayName, brand.rawValue].sorted { $0.count > $1.count }
+        for prefix in prefixes {
+            let tokens = prefix.split(whereSeparator: { $0.isWhitespace })
+            guard !tokens.isEmpty, words.count >= tokens.count,
+                  zip(words.prefix(tokens.count), tokens).allSatisfy({ $0.lowercased() == $1.lowercased() }) else { continue }
+            return words.dropFirst(tokens.count).joined(separator: " ")
+        }
+        return camera
+    }
+
     public func displayName(make: String, model: String, style: CameraNameStyle = .common,
                             customName: String = "", language: String = "zh-CN") -> String {
         // Single-line display cleanup does not alter the retained EXIF fields.

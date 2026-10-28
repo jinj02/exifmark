@@ -53,8 +53,9 @@ public struct CardRenderer {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
         ) else { throw RenderError.allocation }
-        context.setFillColor(gray: request.theme == .white ? 1 : 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let background = try CardBackground(source: source, theme: request.theme, width: width, height: height,
+                                            photoWidth: photoWidth, colorSpace: colorSpace)
+        background.draw(in: context, theme: request.theme)
         context.interpolationQuality = .none
         context.saveGState()
         context.translateBy(x: CGFloat(border), y: CGFloat(footerHeight))
@@ -64,7 +65,8 @@ public struct CardRenderer {
         if footerHeight > 0 {
             context.saveGState()
             context.translateBy(x: CGFloat(border), y: 0)
-            try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request, properties: properties)
+            try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request,
+                           properties: properties, background: background, offsetX: CGFloat(border))
             context.restoreGState()
         }
         guard let card = context.makeImage() else { throw RenderError.allocation }
@@ -115,15 +117,36 @@ public struct CardRenderer {
     }
 
     func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest,
-                    properties: [String: Any]) throws {
-        let primary: CGFloat = request.theme == .white ? 0.075 : 0.97
-        let secondary: CGFloat = request.theme == .white ? 0.46 : 0.65
+                    properties: [String: Any], background: CardBackground, offsetX: CGFloat) throws {
+        let adaptive: CGFloat? = request.theme == .blurred
+            ? try background.foreground(width: width, height: height, offsetX: offsetX) { mask in
+                try drawFooterContents(in: mask, width: width, height: height, request: request,
+                                       properties: properties, primary: 1, secondary: 1, whiteLogo: true)
+            } : nil
+        try drawFooterContents(in: context, width: width, height: height, request: request, properties: properties,
+                               primary: adaptive ?? (request.theme == .white ? 0.075 : 0.97),
+                               secondary: adaptive ?? (request.theme == .white ? 0.46 : 0.65),
+                               whiteLogo: adaptive.map { $0 == 1 } ?? (request.theme == .black))
+    }
+
+    private func drawFooterContents(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest,
+                                    properties: [String: Any], primary: CGFloat, secondary: CGFloat,
+                                    whiteLogo: Bool) throws {
         let sideInset = width * 0.01
         let left = CGRect(x: sideInset, y: 0, width: width * 0.475, height: height)
         let right = CGRect(x: width - sideInset - width * 0.225, y: 0, width: width * 0.225, height: height)
         let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
         let make = request.cameraMake.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? (tiff?[kCGImagePropertyTIFFMake as String] as? String ?? "") : request.cameraMake
+        let brand = CameraBrand.resolve(make: make,
+            model: request.camera.isEmpty ? (tiff?[kCGImagePropertyTIFFModel as String] as? String ?? "") : request.camera)
+        if request.watermarkStyle == .centered {
+            let cameraName = CameraNames.bundled.compactWatermarkName(make: make, model: request.camera,
+                style: request.cameraNameStyle, customName: request.cameraCustomName)
+            try drawCenteredFooter(in: context, width: width, height: height, request: request, cameraName: cameraName,
+                                   brand: brand, primary: primary, secondary: secondary, whiteLogo: whiteLogo)
+            return
+        }
         let cameraName = CameraNames.bundled.watermarkName(make: make, model: request.camera,
             style: request.cameraNameStyle, customName: request.cameraCustomName)
         drawText(cameraName, in: context, frame: left, centerY: height * 0.66,
@@ -135,10 +158,7 @@ public struct CardRenderer {
         let dateLeft = drawText(request.capturedAt, in: context, frame: right, centerY: height * 0.34,
                                size: width * 0.0135, weight: .system, gray: secondary, rightAligned: true)
 
-        guard let brand = CameraBrand.resolve(
-            make: make,
-            model: request.camera.isEmpty ? (tiff?[kCGImagePropertyTIFFModel as String] as? String ?? "") : request.camera
-        ) else { return }
+        guard let brand else { return }
 
         let separatorWidth = max(1, (width * 0.001).rounded())
         let separatorHeight = (height * 0.42).rounded()
@@ -150,7 +170,18 @@ public struct CardRenderer {
                             y: ((height - separatorHeight) / 2).rounded(),
                             width: separatorWidth, height: separatorHeight))
 
-        let name = "\(brand.rawValue)-\(request.theme == .white ? "black" : "white")"
+        let page = try logoPage(brand: brand, white: whiteLogo)
+        let bounds = page.getBoxRect(.mediaBox)
+        let scale = min(width * 0.112 / bounds.width, height * 0.52 / bounds.height)
+        let logoWidth = bounds.width * scale
+        let logoHeight = bounds.height * scale
+        let rect = CGRect(x: separatorX - width * 0.018 - logoWidth, y: (height - logoHeight) / 2,
+                          width: logoWidth, height: logoHeight)
+        drawLogo(page, in: context, rect: rect)
+    }
+
+    private func logoPage(brand: CameraBrand, white: Bool) throws -> CGPDFPage {
+        let name = "\(brand.rawValue)-\(white ? "white" : "black")"
         // Resolve beside the executable so distribution never relies on a build-machine path.
         guard let executable = Bundle.main.executableURL,
               let resources = Bundle(url: executable.deletingLastPathComponent()
@@ -161,11 +192,11 @@ public struct CardRenderer {
         }
         let bounds = page.getBoxRect(.mediaBox)
         guard bounds.width > 0, bounds.height > 0 else { throw RenderError.logo }
-        let scale = min(width * 0.112 / bounds.width, height * 0.52 / bounds.height)
-        let logoWidth = bounds.width * scale
-        let logoHeight = bounds.height * scale
-        let rect = CGRect(x: separatorX - width * 0.018 - logoWidth, y: (height - logoHeight) / 2,
-                          width: logoWidth, height: logoHeight)
+        return page
+    }
+
+    private func drawLogo(_ page: CGPDFPage, in context: CGContext, rect: CGRect) {
+        let bounds = page.getBoxRect(.mediaBox)
         context.saveGState()
         // Scale explicitly: CGPDFPage's fit transform does not enlarge small SVG view boxes.
         context.translateBy(x: rect.minX, y: rect.minY)
@@ -175,11 +206,57 @@ public struct CardRenderer {
         context.restoreGState()
     }
 
+    private func drawCenteredFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest,
+                                    cameraName: String, brand: CameraBrand?, primary: CGFloat, secondary: CGFloat,
+                                    whiteLogo: Bool) throws {
+        let page = try brand.map { try logoPage(brand: $0, white: whiteLogo) }
+        let bounds = page?.getBoxRect(.mediaBox) ?? .zero
+        let scale = page == nil ? 0 : min(width * 0.09 / bounds.width, height * 0.28 / bounds.height)
+        let logoWidth = bounds.width * scale, logoHeight = bounds.height * scale
+        let gap = page != nil && !cameraName.isEmpty ? width * 0.012 : 0
+        let available = width * 0.8 - logoWidth - gap
+        let cameraLine = fittedLine(cameraName, width: available, size: width * 0.02, weight: .system, gray: primary)
+        let cameraWidth = CGFloat(CTLineGetTypographicBounds(cameraLine, nil, nil, nil))
+        let startX = (width - logoWidth - gap - cameraWidth) / 2
+        if let page {
+            drawLogo(page, in: context, rect: CGRect(x: startX, y: height * 0.66 - logoHeight / 2,
+                                                   width: logoWidth, height: logoHeight))
+        }
+        drawText(cameraName, in: context,
+                 frame: CGRect(x: startX + logoWidth + gap, y: 0, width: max(cameraWidth, 1), height: height),
+                 centerY: height * 0.66, size: width * 0.02, weight: .system, gray: primary, rightAligned: false,
+                 preparedLine: cameraLine)
+        let parameters = [request.focalLength, request.exposure].filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.joined(separator: " · ")
+        drawText(parameters, in: context, frame: CGRect(x: width * 0.1, y: 0, width: width * 0.8, height: height),
+                 centerY: height * 0.34, size: width * 0.0135, weight: .system, gray: secondary,
+                 rightAligned: false, centered: true)
+    }
+
     @discardableResult
     private func drawText(_ text: String, in context: CGContext, frame: CGRect, centerY: CGFloat,
-                          size: CGFloat, weight: CTFontUIFontType, gray: CGFloat, rightAligned: Bool) -> CGFloat? {
-        let text = text.components(separatedBy: .controlCharacters).joined(separator: " ")
+                          size: CGFloat, weight: CTFontUIFontType, gray: CGFloat, rightAligned: Bool,
+                          centered: Bool = false, preparedLine: CTLine? = nil) -> CGFloat? {
         guard !text.isEmpty else { return nil }
+        let fitted = preparedLine ?? fittedLine(text, width: frame.width, size: size, weight: weight, gray: gray)
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        let lineWidth = CGFloat(CTLineGetTypographicBounds(fitted, &ascent, &descent, nil))
+        let textX = centered ? frame.midX - lineWidth / 2 : (rightAligned ? frame.maxX - lineWidth : frame.minX)
+        context.saveGState()
+        context.clip(to: frame)
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x: textX, y: centerY - (ascent - descent) / 2)
+        CTLineDraw(fitted, context)
+        context.restoreGState()
+        let inkBounds = CTLineGetBoundsWithOptions(fitted, .useGlyphPathBounds)
+        guard !inkBounds.isNull, inkBounds.minX.isFinite else { return nil }
+        return max(frame.minX, textX + inkBounds.minX)
+    }
+
+    private func fittedLine(_ text: String, width: CGFloat, size: CGFloat,
+                            weight: CTFontUIFontType, gray: CGFloat) -> CTLine {
+        let text = text.components(separatedBy: .controlCharacters).joined(separator: " ")
         let color = CGColor(gray: gray, alpha: 1)
         func line(at size: CGFloat) -> CTLine {
             let font = CTFontCreateUIFontForLanguage(weight, size, nil)!
@@ -191,27 +268,16 @@ public struct CardRenderer {
         }
         var fitted = line(at: size)
         let naturalWidth = CGFloat(CTLineGetTypographicBounds(fitted, nil, nil, nil))
-        if naturalWidth > frame.width {
-            let fittedSize = max(size * 0.75, size * frame.width / naturalWidth)
+        if naturalWidth > width {
+            let fittedSize = max(size * 0.75, size * width / naturalWidth)
             fitted = line(at: fittedSize)
             let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [
                 NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateUIFontForLanguage(weight, fittedSize, nil)!,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
             ]))
-            fitted = CTLineCreateTruncatedLine(fitted, Double(frame.width), .end, token) ?? token
+            fitted = CTLineCreateTruncatedLine(fitted, Double(width), .end, token) ?? token
         }
-        var ascent: CGFloat = 0, descent: CGFloat = 0
-        let lineWidth = CGFloat(CTLineGetTypographicBounds(fitted, &ascent, &descent, nil))
-        let textX = rightAligned ? frame.maxX - lineWidth : frame.minX
-        context.saveGState()
-        context.clip(to: frame)
-        context.textMatrix = .identity
-        context.textPosition = CGPoint(x: textX, y: centerY - (ascent - descent) / 2)
-        CTLineDraw(fitted, context)
-        context.restoreGState()
-        let inkBounds = CTLineGetBoundsWithOptions(fitted, .useGlyphPathBounds)
-        guard !inkBounds.isNull, inkBounds.minX.isFinite else { return nil }
-        return max(frame.minX, textX + inkBounds.minX)
+        return fitted
     }
 
     private static func updateProperties(_ properties: inout [String: Any], width: Int, height: Int) {

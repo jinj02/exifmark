@@ -93,6 +93,16 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     result = subprocess.run([str(binary), '--install-jpeg', str(install)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert (directory/'installed.jpg').read_bytes() == original_jpeg
+    # Exercise every style from the relocated binary, including the JPEG coefficient path.
+    request['input'] = str(directory/'installed.jpg')
+    request['focalLength'] = '35mm'
+    for theme in ['white', 'black', 'blurred']:
+        for style in ['detailed', 'centered']:
+            request.update(theme=theme, watermarkStyle=style, output=str(directory/f'{theme}-{style}.jpg'))
+            path.write_text(json.dumps(request))
+            result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
+            assert result.returncode == 0, result.stderr
+            assert Image.open(request['output']).format == 'JPEG'
     shutil.rmtree(binary.parent/'ExifmarkRenderer_ExifmarkCore.bundle')
     request['output'] = str(directory/'missing-logo.jpg'); path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
