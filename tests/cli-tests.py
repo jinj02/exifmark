@@ -95,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                 for fields, expected in [
                     ({'cameraMake': 'SONY'}, 'SONY α7 IV'),
                     ({'cameraMake': 'Canon', 'camera': 'Canon EOS R5 Mark II'}, 'Canon EOS R5 Mark II'),
-                    ({'cameraMake': 'SONY', 'cameraNameStyle': 'exif'}, 'SONY ILCE-7M4'),
+                    ({'cameraMake': 'SONY', 'cameraNameStyle': 'exif'}, 'ILCE-7M4'),
                     ({'cameraMake': 'SONY', 'camera': 'ILCE-7RM4A'}, 'SONY α7R IVA'),
                     ({'cameraMake': 'SONY', 'camera': 'ILCE-7M5'}, 'SONY α7 V'),
                     ({'cameraMake': 'SONY', 'camera': 'ILCE-7RM6'}, 'SONY α7R VI'),

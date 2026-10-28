@@ -204,7 +204,10 @@ final class CardRendererTests {
         ] {
             equal(names.watermarkName(make: make, model: model), expected)
         }
-        equal(names.watermarkName(make: "SONY", model: "ILCE-7RM4A", style: .exif), "SONY ILCE-7RM4A")
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7RM4A", style: .exif), "ILCE-7RM4A")
+        equal(names.watermarkName(make: "", model: "ILCE-7M4", style: .exif), "ILCE-7M4")
+        equal(names.watermarkName(make: "Unknown", model: "Camera X", style: .exif), "Camera X")
+        equal(names.watermarkName(make: "SONY", model: "", style: .exif), "")
         equal(names.watermarkName(make: "Canon", model: "Canon EOS R5", style: .exif), "Canon EOS R5")
         equal(names.watermarkName(make: "NIKON CORPORATION", model: "NIKON Z 8", style: .exif), "NIKON Z 8")
         equal(names.watermarkName(make: "SONY", model: "ILCE-7M0"), "SONY ILCE-7M0")

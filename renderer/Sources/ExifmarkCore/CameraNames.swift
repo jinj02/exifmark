@@ -81,8 +81,8 @@ public struct CameraNames {
     public func watermarkName(make: String, model: String, style: CameraNameStyle = .common,
                               customName: String = "", language: String = "zh-CN") -> String {
         let camera = displayName(make: make, model: model, style: style, customName: customName, language: language)
-        // A custom name is the complete user-supplied label.
-        if !Self.singleLine(customName).isEmpty { return camera }
+        // Custom labels and EXIF model text are displayed without an added manufacturer.
+        if !Self.singleLine(customName).isEmpty || style == .exif { return camera }
         let text = Self.singleLine(camera)
         guard !text.isEmpty else { return camera }
         let manufacturer = Self.singleLine(make)
