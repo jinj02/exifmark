@@ -85,7 +85,7 @@ for (theme, name) in [("white", "light"), ("black", "dark")] {
     context.textPosition = CGPoint(x: 1034, y: (CGFloat(height) - bounds.height) / 2 - bounds.minY)
     CTLineDraw(line, context)
     let image = context.makeImage()!
-    let url = output.appendingPathComponent("readme-header-\(name)-v2.png")
+    let url = output.appendingPathComponent("readme-header-\(name).png")
     save(image, to: url, type: UTType.png.identifier as CFString)
     print(url.path)
 }

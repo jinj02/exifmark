@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/readme-header-dark-v2.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/readme-header-light-v2.png">
-  <img src="docs/readme-header-light-v2.png" alt="exifmark — SONY α7R VI · FE 24-70mm F2.8 GM II · 35mm · f/8 · 1/250s · ISO 100" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme-header-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/readme-header-light.png">
+  <img src="docs/readme-header-light.png" alt="exifmark — SONY α7R VI · FE 24-70mm F2.8 GM II · 35mm · f/8 · 1/250s · ISO 100" width="100%">
 </picture>
 
 **为 Lightroom Classic 导出的照片自动生成 EXIF 参数边框卡片**
@@ -32,6 +32,7 @@
   - **仅底部参数栏**：照片上、左、右三边贴边，仅底部追加照片宽度 `8%` 的参数栏。
 - **保留照片压缩数据**：所有外框与参数栏均向外扩展画布，直接复制LrC导出JPEG的量化DCT系数，照片区域免于二次有损编码。边框位置和照片占位向上对齐JPEG的MCU块，末端不足整块的部分保留原有块并向外补齐。
 - **相机品牌识别**：根据相机厂商自动选择SONY、Canon、Nikon、FUJIFILM、Leica、Panasonic、LUMIX、PENTAX、RICOH、Hasselblad、SIGMA、DJI、Kodak、OLYMPUS或Phase One字标，适配黑白主题；未知品牌留空。
+- **相机型号命名**：默认显示常用商品名，索尼微单通过系列正则解析代际与后缀，其他品牌使用已核实映射；可切换EXIF原名，或为当前批量导出填写自定义名称。未知型号自动回退原名，原始品牌、型号及文件元数据保持完整。[映射覆盖与维护说明](docs/CAMERA_NAMES.md)。
 - **智能排版与防溢出**：字号、Logo 与边距随照片宽度同比缩放；过长的相机或镜头名称会自动缩字（最低至 `75%`）并在超宽时优雅省略；缺失的 EXIF 字段自动留空。
 - **色彩与隐私安全**：
   - LrC按导出窗口中的质量输出JPEG。新增边框和参数栏使用这张JPEG的实际量化表、色度采样与分量配置进行压缩，再拼接原照片的量化系数并优化熵编码。整个流程无需TIFF中转或临时入库，继承原JPEG的ICC配置。
@@ -61,6 +62,8 @@
 3. 在弹出的 **exifmark 面板** 中选择：
    - **背景颜色**：白色 / 黑色
    - **边框布局**：三边 2% 留白 + 底部 8% 参数栏 / 仅底部 8% 参数栏
+   - **相机名称**：常用名称（默认）／EXIF原名
+   - **自定义名称**：可留空；填写后优先用于本次批量导出的所有照片
 4. 在 LrC 的 **文件设置 (File Settings)** 中确认：
    - 图像格式选择 **JPEG**
    - **取消勾选**「HDR 输出」
@@ -68,7 +71,7 @@
 5. 点击 **导出** 即可。
 
 > [!TIP]
-> - **保存为导出预设**：你可以点击导出窗口左下角的「添加」将当前配置存为 LrC 导出预设，背景色与边框布局会一并保存，下次一键导出。
+> - **保存为导出预设**：你可以点击导出窗口左下角的「添加」将当前配置存为 LrC 导出预设，背景色、边框布局、相机命名方式与自定义名称会一并保存，下次一键导出。
 > - **与其他插件联用**：如果同时挂载了其他后期处理动作，建议将 **exifmark** 放在处理链的最后一个。
 
 ---

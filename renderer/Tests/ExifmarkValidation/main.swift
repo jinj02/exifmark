@@ -136,6 +136,121 @@ final class CardRendererTests {
         equal(try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.utf8)).cameraMake, "")
     }
 
+    func testCameraNames() throws {
+        let names = CameraNames.bundled
+        for (make, model, expected) in [
+            ("SONY", "ILCE-7M3", "α7 III"), ("SONY", "ILCE-7M4", "α7 IV"),
+            ("SONY", "ILCE-7RM4", "α7R IV"), ("SONY", "ILCE-7RM5", "α7R V"),
+            ("Canon", "Canon EOS R5", "EOS R5"), ("Canon", "Canon EOS R5 Mark II", "EOS R5 Mark II"),
+            ("NIKON CORPORATION", "NIKON Z 8", "Z 8"), ("FUJIFILM", "X-T5", "X-T5"),
+            ("RICOH IMAGING COMPANY, LTD.", "PENTAX K-1", "K-1"),
+            ("RICOH IMAGING COMPANY, LTD.", "PENTAX K-1 Mark II", "K-1 Mark II"),
+            ("RICOH IMAGING COMPANY, LTD.", "GR III", "GR III"), ("RICOH", "GR IIIx", "GR IIIx"),
+            ("Panasonic", "DC-S5M2", "LUMIX S5II"), ("Panasonic", "DC-S5M2X", "LUMIX S5IIX"),
+            ("  sony\n", " ilce-7m4 ", "α7 IV"), ("NIKON", "Z  8", "Z 8"),
+        ] {
+            equal(names.displayName(make: make, model: model), expected)
+        }
+        for (make, model) in [
+            ("Canon", "Canon EOS R5 C"), ("RICOH", "GR IIIx HDF"), ("Unknown", "ILCE-7M4"),
+            ("Acme SONY compatible", "ILCE-7M4"), ("", "ILCE-7M4"), ("SONY", ""),
+            ("SONY", "  Unknown camera X-II "), ("", ""),
+        ] {
+            equal(names.displayName(make: make, model: model), model)
+        }
+        let raw = "  ILCE-7M4\n"
+        equal(names.displayName(make: "SONY", model: raw, style: .exif), raw)
+        equal(names.displayName(make: "SONY", model: raw, customName: " 我的相机α7 IV "), "我的相机α7 IV")
+        equal(names.displayName(make: "SONY", model: raw, style: .exif, customName: "自定义"), "自定义")
+        equal(names.displayName(make: "SONY", model: raw, customName: " \n\t"), "α7 IV")
+        equal(names.displayName(make: "", model: "", customName: "自定义"), "自定义")
+        equal(names.displayName(make: "SONY", model: raw, language: "en-US"), "α7 IV")
+
+        let sample = #"{"version":1,"brands":{"test":["TEST"]},"entries":[{"brand":"test","models":["M-II"],"names":{"default":"Model II","zh-CN":"地区名称"},"sources":["https://example.com/camera"],"verifiedOn":"2026-10-28"}]}"#
+        let regional = try CameraNames(data: Data(sample.utf8))
+        equal(regional.displayName(make: "test", model: "M-II"), "地区名称")
+        equal(regional.displayName(make: "test", model: "M-II", language: "en-US"), "Model II")
+        throwsError(try CameraNames(data: Data(sample.replacingOccurrences(of: #"["M-II"]"#, with: #"["M-II","m-ii"]"#).utf8)))
+        throwsError(try CameraNames(data: Data(sample.replacingOccurrences(of: #""default":"Model II""#, with: #""default":"""#).utf8)))
+
+        let request = RenderRequest(input: "/source.tif", output: "/output.jpg", cameraMake: " SONY ",
+            camera: raw, cameraNameStyle: .exif, cameraCustomName: "自定义")
+        let restored = try JSONDecoder().decode(RenderRequest.self, from: JSONEncoder().encode(request))
+        equal(restored.cameraMake, " SONY "); equal(restored.camera, raw)
+        equal(restored.cameraNameStyle, .exif); equal(restored.cameraCustomName, "自定义")
+        let legacy = #"{"version":1,"input":"/source.tif","output":"/output.jpg","theme":"white","camera":"ILCE-7M4","lens":"","exposure":"","capturedAt":"","quality":0.9}"#
+        let old = try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.utf8))
+        equal(old.cameraNameStyle, .common); equal(old.cameraCustomName, "")
+        throwsError(try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.replacingOccurrences(of: #""quality":0.9"#, with: #""quality":0.9,"cameraNameStyle":"invalid""#).utf8)))
+    }
+
+    func testSonyCameraNameRules() throws {
+        let names = CameraNames.bundled
+        // Representatives of the supported mirrorless families, including historical NEX cameras.
+        for (model, expected) in [
+            ("ILCE-1", "α1"), ("ILCE-1M2", "α1 II"),
+            ("ILCE-9", "α9"), ("ILCE-9M2", "α9 II"), ("ILCE-9M3", "α9 III"),
+            ("ILCE-7", "α7"), ("ILCE-7M2", "α7 II"), ("ILCE-7M3", "α7 III"), ("ILCE-7M4", "α7 IV"), ("ILCE-7M5", "α7 V"),
+            ("ILCE-7R", "α7R"), ("ILCE-7RM2", "α7R II"), ("ILCE-7RM3", "α7R III"),
+            ("ILCE-7RM4", "α7R IV"), ("ILCE-7RM5", "α7R V"), ("ILCE-7RM6", "α7R VI"),
+            ("ILCE-7RM3A", "α7R IIIA"), ("ILCE-7RM4A", "α7R IVA"),
+            ("ILCE-7S", "α7S"), ("ILCE-7SM2", "α7S II"), ("ILCE-7SM3", "α7S III"),
+            ("ILCE-7C", "α7C"), ("ILCE-7CM2", "α7C II"), ("ILCE-7CR", "α7CR"),
+            ("ILCE-3000", "α3000"), ("ILCE-3500", "α3500"),
+            ("ILCE-5000", "α5000"), ("ILCE-5100", "α5100"),
+            ("ILCE-6000", "α6000"), ("ILCE-6100", "α6100"), ("ILCE-6300", "α6300"),
+            ("ILCE-6400", "α6400"), ("ILCE-6500", "α6500"), ("ILCE-6600", "α6600"), ("ILCE-6700", "α6700"),
+            ("NEX-3", "NEX-3"), ("NEX-C3", "NEX-C3"), ("NEX-F3", "NEX-F3"), ("NEX-3N", "NEX-3N"),
+            ("NEX-5", "NEX-5"), ("NEX-5N", "NEX-5N"), ("NEX-5R", "NEX-5R"), ("NEX-5T", "NEX-5T"),
+            ("NEX-6", "NEX-6"), ("NEX-7", "NEX-7"), ("ILCE-QX1", "ILCE-QX1"),
+            ("ZV-E1", "ZV-E1"), ("ZV-E10", "ZV-E10"), ("ZV-E10M2", "ZV-E10 II"),
+            (" sony ilce-7cm2 ", "α7C II"), ("nex-5n", "NEX-5N"), ("zv-e10m2", "ZV-E10 II"),
+            // Synthetic syntax checks establish that no per-model allowlist is required.
+            ("ILCE-7M9", "α7 IX"), ("ILCE-7M10", "α7 X"),
+            ("ILCE-7M4K", "α7 IVK"), ("ILCE-6800", "α6800"),
+        ] {
+            equal(names.displayName(make: "SONY", model: model), expected)
+            equal(names.displayName(make: "SONY", model: model, style: .exif), model)
+            equal(names.displayName(make: "SONY", model: model, customName: "自定义"), "自定义")
+            equal(names.displayName(make: "Canon", model: model), model)
+        }
+        for model in ["ILCE-7M0", "ILCE-7M1", "ILCE-7M02", "ILCE-7M1000", "ILCE-7RM4AB",
+                      "ILCE-7RX", "ILCE-7RSM2", "ILCE-7M4-extra", "ILCE-7M4\nextra", "ILCE-0", "ILCE-007",
+                      "ILCE-7 M4", "ILCE-7M4 SONY", "SONY SONY ILCE-7M4", "NEX-VG30", "ILCA-99M2",
+                      "DSLR-A900", "DSC-RX1", "ZV-1M2", "ILME-FX3", ""] {
+            equal(names.displayName(make: "SONY", model: model), model)
+        }
+        // The Sony rule works with an empty product table and respects explicitly supplied names.
+        let empty = #"{"version":1,"brands":{"sony":["SONY"]},"entries":[]}"#
+        equal(try CameraNames(data: Data(empty.utf8)).displayName(make: "SONY", model: "ILCE-7M4"), "α7 IV")
+        equal(try CameraNames(data: Data(empty.utf8)).displayName(make: "Unknown", model: "ILCE-7M4"), "ILCE-7M4")
+    }
+
+    func testSonyFutureCameraNameRules() throws {
+        // Deliberately invented identifiers verify syntax coverage without asserting product existence.
+        let cases = [
+            ("ILCE-7M99", "α7 XCIX"), ("ILCE-7RM99", "α7R XCIX"),
+            ("ILCE-7SM99", "α7S XCIX"), ("ILCE-7CM99", "α7C XCIX"),
+            ("ILCE-7CRM99", "α7CR XCIX"), ("ILCE-7RM99A", "α7R XCIXA"),
+            ("ILCE-9M99", "α9 XCIX"), ("ILCE-9M99A", "α9 XCIXA"),
+            ("ILCE-1M99", "α1 XCIX"), ("ILCE-1M99A", "α1 XCIXA"),
+            ("ILCE-42", "α42"), ("ILCE-42M12", "α42 XII"),
+            ("ILCE-42RM14A", "α42R XIVA"), ("ILCE-42CM40", "α42C XL"),
+            ("ILCE-42M90", "α42 XC"), ("ILCE-42M999", "α42 CMXCIX"),
+        ]
+        let empty = #"{"version":1,"brands":{"sony":["SONY"]},"entries":[]}"#
+        let withoutProductTable = try CameraNames(data: Data(empty.utf8))
+        for (model, expected) in cases {
+            equal(CameraNames.bundled.displayName(make: "SONY", model: model), expected)
+            equal(withoutProductTable.displayName(make: "SONY", model: model), expected)
+            equal(withoutProductTable.displayName(make: " sony ", model: "  " + model.lowercased() + "  "), expected)
+            equal(withoutProductTable.displayName(make: "SONY", model: model, style: .exif), model)
+            equal(withoutProductTable.displayName(make: "SONY", model: model, customName: "自定义"), "自定义")
+            equal(withoutProductTable.displayName(make: "Unknown", model: model), model)
+        }
+        print("Sony future syntax: \(cases.count) invented identifiers, 6 checks each")
+    }
+
     func testAllEightOrientationsAreNormalized() throws {
         for orientation in 1...8 {
             let input = try fixture(orientation: orientation)
@@ -246,6 +361,9 @@ let suite = CardRendererTests()
 let cases: [(String, () throws -> Void)] = [
     ("dimensions and themes", suite.testDimensionsAcrossAspectRatiosAndThemes),
     ("camera brands and legacy requests", suite.testCameraBrandResolution),
+    ("camera display names and settings compatibility", suite.testCameraNames),
+    ("Sony camera family regex rules", suite.testSonyCameraNameRules),
+    ("Sony future camera syntax without a product table", suite.testSonyFutureCameraNameRules),
     ("eight orientations", suite.testAllEightOrientationsAreNormalized),
     ("metadata and AdobeRGB", suite.testAllowedMetadataAndAdobeRGBProfileSurvive),
     ("stripped GPS", suite.testStrippedGPSIsNotReintroducedByVisibleFields),

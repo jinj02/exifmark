@@ -86,6 +86,45 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
     original.paste((20, 180, 35), (160, 0, 320, 120))
     original.paste((20, 35, 215), (0, 120, 160, 240))
     original.paste((225, 195, 20), (160, 120, 320, 240))
+    # Compare full rendered pixels against explicit expected text, exercising both render paths/layouts.
+    for extension in ['jpg', 'tif']:
+        source = directory / f'camera-names.{extension}'
+        original.resize((1200, 800)).save(source)
+        for layout in ['bordered', 'bottomOnly']:
+            for theme in ['white', 'black']:
+                for fields, expected in [
+                    ({'cameraMake': 'SONY'}, 'α7 IV'),
+                    ({'cameraMake': 'Canon', 'camera': 'Canon EOS R5 Mark II'}, 'EOS R5 Mark II'),
+                    ({'cameraMake': 'SONY', 'cameraNameStyle': 'exif'}, 'ILCE-7M4'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7RM4A'}, 'α7R IVA'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7M5'}, 'α7 V'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7RM6'}, 'α7R VI'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-9'}, 'α9'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-9M2'}, 'α9 II'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-9M3'}, 'α9 III'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-1'}, 'α1'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-1M2'}, 'α1 II'),
+                    # Deliberately invented future syntax, including a new numeric family.
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7RM99A'}, 'α7R XCIXA'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-9M99'}, 'α9 XCIX'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-1M99'}, 'α1 XCIX'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-42RM14A'}, 'α42R XIVA'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7CM2'}, 'α7C II'),
+                    ({'cameraMake': 'SONY', 'camera': 'ZV-E10M2'}, 'ZV-E10 II'),
+                    ({'cameraMake': 'SONY', 'camera': 'ILCE-7M0'}, 'ILCE-7M0'),
+                    ({'cameraMake': 'Unknown'}, 'ILCE-7M4'),
+                    ({'cameraMake': 'SONY', 'cameraCustomName': '我的相机α7 IV'}, '我的相机α7 IV'),
+                ]:
+                    output = directory / 'camera-actual.jpg'
+                    reference = directory / 'camera-reference.jpg'
+                    result = render(directory, source, output, layout=layout, theme=theme, **fields)
+                    check(result.returncode == 0, result.stderr)
+                    reference_fields = dict(fields, cameraNameStyle='exif', cameraCustomName=expected)
+                    result = render(directory, source, reference, layout=layout, theme=theme, **reference_fields)
+                    check(result.returncode == 0, result.stderr)
+                    check(ImageChops.difference(Image.open(output), Image.open(reference)).getbbox() is None,
+                          f'Camera display text differs: {extension}, {layout}, {fields}')
+                    check(272 not in Image.open(output).getexif(), 'Display name leaked into embedded EXIF')
     for orientation in range(1, 9):
         source = directory / f'orientation-{orientation}.jpg'
         exif = Image.Exif(); exif[274] = orientation

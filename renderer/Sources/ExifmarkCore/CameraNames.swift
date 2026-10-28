@@ -1,0 +1,88 @@
+import Foundation
+
+public enum CameraNameStyle: String, Codable {
+    case common, exif
+}
+
+/// Product data and family parsers are independent of rendering and logo recognition.
+public struct CameraNames {
+    private struct Catalog: Decodable {
+        let version: Int
+        let brands: [String: [String]]
+        let entries: [Entry]
+    }
+
+    private struct Entry: Decodable {
+        let brand: String
+        let models: [String]
+        let names: [String: String]
+        let sources: [URL]
+        let verifiedOn: String
+    }
+
+    private struct Key: Hashable {
+        let make: String
+        let model: String
+    }
+
+    private var names: [Key: [String: String]] = [:]
+    private var sonyMakes: Set<String> = []
+
+    public static let bundled: CameraNames = {
+        // Resolve at the installed executable, without depending on build-machine resource paths.
+        guard let executable = Bundle.main.executableURL,
+              let bundle = Bundle(url: executable.deletingLastPathComponent()
+                .appendingPathComponent("ExifmarkRenderer_ExifmarkCore.bundle")),
+              let url = bundle.url(forResource: "CameraNames", withExtension: "json"),
+              let data = try? Data(contentsOf: url), let catalog = try? CameraNames(data: data) else {
+            return CameraNames()
+        }
+        return catalog
+    }()
+
+    private init() {}
+
+    public init(data: Data) throws {
+        let catalog = try JSONDecoder().decode(Catalog.self, from: data)
+        guard catalog.version == 1 else { throw RenderError.invalid("相机名称映射版本无效。") }
+        sonyMakes = Set((catalog.brands["sony"] ?? []).map(Self.normalize))
+        for entry in catalog.entries {
+            guard let makes = catalog.brands[entry.brand], !makes.isEmpty, !entry.models.isEmpty,
+                  let fallback = entry.names["default"], !Self.normalize(fallback).isEmpty,
+                  entry.names.values.allSatisfy({ !Self.normalize($0).isEmpty }),
+                  !entry.sources.isEmpty, entry.sources.allSatisfy({ $0.scheme == "https" && $0.host != nil }),
+                  !entry.verifiedOn.isEmpty else {
+                throw RenderError.invalid("相机名称映射条目不完整。")
+            }
+            for make in makes {
+                for model in entry.models {
+                    let key = Key(make: Self.normalize(make), model: Self.normalize(model))
+                    guard !key.make.isEmpty, !key.model.isEmpty, names[key] == nil else {
+                        throw RenderError.invalid("相机名称映射包含空值或重复的品牌型号。")
+                    }
+                    names[key] = entry.names
+                }
+            }
+        }
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").lowercased()
+    }
+
+    public func displayName(make: String, model: String, style: CameraNameStyle = .common,
+                            customName: String = "", language: String = "zh-CN") -> String {
+        // Single-line display cleanup does not alter the retained EXIF fields.
+        let custom = customName.components(separatedBy: .controlCharacters).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !custom.isEmpty { return custom }
+        guard style == .common else { return model }
+        let make = Self.normalize(make)
+        if let localized = names[Key(make: make, model: Self.normalize(model))] {
+            // Explicit regional names can override a family rule when needed.
+            return localized[language] ?? localized["default"] ?? model
+        }
+        if sonyMakes.contains(make), let product = SonyCameraNames.displayName(model: model) { return product }
+        return model
+    }
+}

@@ -25,6 +25,15 @@ equal(fields.camera, 'ILCE-7M4')
 equal(fields.lens, 'FE 24-70mm F2.8 GM II · 35mm')
 equal(fields.exposure, 'f/2.8 · 1/250s · ISO 100')
 equal(fields.capturedAt, '2026.10.27 09:41')
+local originalMake, originalModel = raw.cameraMake, formatted.cameraModel
+raw.cameraMake, raw.cameraModel = '  SoNy\t', ' ILCE-7M4\n'
+local original = Metadata.read(photo)
+equal(original.cameraMake, '  SoNy\t'); equal(original.camera, ' ILCE-7M4\n')
+raw.cameraMake, raw.cameraModel = originalMake, nil
+-- Older SDKs can expose camera identifiers through formatted metadata only.
+raw.cameraMake, formatted.cameraMake = nil, ' Canon '
+equal(Metadata.read(photo).cameraMake, ' Canon ')
+raw.cameraMake, formatted.cameraMake = originalMake, nil
 local missing = Metadata.read({getRawMetadata = function() error('missing') end, getFormattedMetadata = function() end})
 for _, key in ipairs({'cameraMake','camera','lens','exposure','capturedAt'}) do equal(missing[key], '') end
 raw.aperture, raw.shutterSpeed = nil, nil
@@ -38,7 +47,7 @@ equal(Settings.error(valid, true, true), nil)
 equal(Settings.error(valid, false, true) ~= nil, true)
 equal(Settings.error(valid, true, false) ~= nil, true)
 for key, value in pairs({LR_format='TIFF', LR_enableHDRDisplay=true, LR_jpeg_useLimitSize=true,
-    exifmark_theme='invalid', exifmark_layout='invalid'}) do
+    exifmark_theme='invalid', exifmark_layout='invalid', exifmark_cameraNameStyle='invalid', exifmark_cameraCustomName=42}) do
     local p = {}; for k,v in pairs(valid) do p[k] = v end; p[key] = value
     equal(Settings.error(p, true, true) ~= nil, true)
 end
@@ -108,6 +117,24 @@ function props:removeObserver(key) self.callbacks[key]=nil end
 Filter.startDialog(props)
 equal(props.exifmark_theme,'white'); equal(props.LR_cantExportBecause,nil)
 equal(props.exifmark_layout,'bordered')
+equal(props.exifmark_cameraNameStyle,'common'); equal(props.exifmark_cameraCustomName,'')
+-- Simulate Lightroom saving each declared preset field and restoring a fresh dialog.
+props.exifmark_cameraNameStyle, props.exifmark_cameraCustomName = 'exif', '我的相机α7 IV'
+local saved = {}
+for _, field in ipairs(Filter.exportPresetFields) do
+    saved[field.key] = props[field.key] == nil and field.default or props[field.key]
+end
+saved.callbacks = {}
+saved.addObserver, saved.removeObserver = props.addObserver, props.removeObserver
+saved.LR_format = 'JPEG'
+Filter.startDialog(saved)
+equal(saved.exifmark_cameraNameStyle,'exif'); equal(saved.exifmark_cameraCustomName,'我的相机α7 IV')
+Filter.endDialog(saved)
+props.exifmark_cameraNameStyle, props.exifmark_cameraCustomName = 'common', ''
+props.exifmark_cameraNameStyle='invalid'; props.callbacks.exifmark_cameraNameStyle()
+equal(props.LR_cantExportBecause ~= nil,true)
+props.exifmark_cameraNameStyle='common'; props.callbacks.exifmark_cameraNameStyle()
+equal(props.LR_cantExportBecause,nil)
 equal(props.exifmark_status:find('各留白2%',1,true) ~= nil,true)
 props.exifmark_layout='bottomOnly'; props.callbacks.exifmark_layout()
 equal(props.LR_cantExportBecause,nil)
@@ -137,6 +164,8 @@ local function runExport(options)
     end
     local exportProperties = {}; for key,value in pairs(valid) do exportProperties[key]=value end
     exportProperties.exifmark_layout = options.layout
+    exportProperties.exifmark_cameraNameStyle = options.cameraNameStyle
+    exportProperties.exifmark_cameraCustomName = options.cameraCustomName
     exportProperties.LR_jpeg_quality=options.quality or 0.9
     exportProperties.LR_export_colorSpace='AdobeRGB'
     exportProperties.LR_removeLocationMetadata=true
@@ -185,6 +214,13 @@ equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=0.9 + compressed footer')
 equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
 equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraMake":"SONY"',1,true) ~= nil,true)
+equal(requestPayload:find('"cameraNameStyle":"common"',1,true) ~= nil,true)
+equal(requestPayload:find('"cameraCustomName":""',1,true) ~= nil,true)
+destinations=runExport({cameraNameStyle='exif',cameraCustomName='我的相机α7 IV'})
+for _,d in ipairs(destinations) do equal(d.ok,true) end
+equal(requestPayload:find('"cameraNameStyle":"exif"',1,true) ~= nil,true)
+equal(requestPayload:find('"cameraCustomName":"我的相机α7 IV"',1,true) ~= nil,true)
+equal(requestPayload:find('"camera":"ILCE-7M4"',1,true) ~= nil,true)
 destinations=runExport({layout='bottomOnly'})
 for _,d in ipairs(destinations) do equal(d.ok,true) end
 equal(requestPayload:find('"layout":"bottomOnly"',1,true) ~= nil,true)

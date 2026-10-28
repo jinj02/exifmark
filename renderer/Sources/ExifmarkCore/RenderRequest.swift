@@ -16,6 +16,8 @@ public struct RenderRequest: Codable {
     public var layout: Layout
     public var cameraMake: String
     public var camera: String
+    public var cameraNameStyle: CameraNameStyle
+    public var cameraCustomName: String
     public var lens: String
     public var exposure: String
     public var capturedAt: String
@@ -24,7 +26,8 @@ public struct RenderRequest: Codable {
 
     public init(input: String, output: String, theme: Theme = .white, layout: Layout = .bordered,
                 cameraMake: String = "", camera: String = "", lens: String = "", exposure: String = "",
-                capturedAt: String = "", quality: Double = 0.9) {
+                capturedAt: String = "", quality: Double = 0.9,
+                cameraNameStyle: CameraNameStyle = .common, cameraCustomName: String = "") {
         self.version = 1
         self.input = input
         self.output = output
@@ -32,6 +35,8 @@ public struct RenderRequest: Codable {
         self.layout = layout
         self.cameraMake = cameraMake
         self.camera = camera
+        self.cameraNameStyle = cameraNameStyle
+        self.cameraCustomName = cameraCustomName
         self.lens = lens
         self.exposure = exposure
         self.capturedAt = capturedAt
@@ -40,6 +45,7 @@ public struct RenderRequest: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case version, input, output, theme, layout, cameraMake, camera, lens, exposure, capturedAt, quality
+        case cameraNameStyle, cameraCustomName
     }
 
     public init(from decoder: Decoder) throws {
@@ -51,6 +57,8 @@ public struct RenderRequest: Codable {
         layout = try values.decodeIfPresent(Layout.self, forKey: .layout) ?? .bordered
         cameraMake = try values.decodeIfPresent(String.self, forKey: .cameraMake) ?? ""
         camera = try values.decode(String.self, forKey: .camera)
+        cameraNameStyle = try values.decodeIfPresent(CameraNameStyle.self, forKey: .cameraNameStyle) ?? .common
+        cameraCustomName = try values.decodeIfPresent(String.self, forKey: .cameraCustomName) ?? ""
         lens = try values.decode(String.self, forKey: .lens)
         exposure = try values.decode(String.self, forKey: .exposure)
         capturedAt = try values.decode(String.self, forKey: .capturedAt)

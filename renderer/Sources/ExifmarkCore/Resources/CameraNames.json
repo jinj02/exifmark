@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "brands": {
+    "sony": [
+      "SONY"
+    ],
+    "canon": [
+      "Canon"
+    ],
+    "nikon": [
+      "NIKON",
+      "NIKON CORPORATION"
+    ],
+    "fujifilm": [
+      "FUJIFILM"
+    ],
+    "pentax": [
+      "PENTAX",
+      "RICOH IMAGING COMPANY, LTD."
+    ],
+    "ricoh": [
+      "RICOH",
+      "RICOH IMAGING COMPANY, LTD."
+    ],
+    "panasonic": [
+      "Panasonic"
+    ]
+  },
+  "entries": [
+    {
+      "brand": "canon",
+      "models": [
+        "Canon EOS R5",
+        "EOS R5"
+      ],
+      "names": {
+        "default": "EOS R5"
+      },
+      "sources": [
+        "https://downloads.canon.com/nw/camera/products/eos/product-1/pdfs/EOSR5_specifications_FINAL_JULY14.pdf"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "canon",
+      "models": [
+        "Canon EOS R5 Mark II",
+        "EOS R5 Mark II"
+      ],
+      "names": {
+        "default": "EOS R5 Mark II"
+      },
+      "sources": [
+        "https://www.usa.canon.com/shop/p/eos-r5-mark-ii"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "nikon",
+      "models": [
+        "NIKON Z 8",
+        "Z 8"
+      ],
+      "names": {
+        "default": "Z 8"
+      },
+      "sources": [
+        "https://www.nikonusa.com/p/z-8/1695/overview"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "fujifilm",
+      "models": [
+        "X-T5",
+        "FUJIFILM X-T5"
+      ],
+      "names": {
+        "default": "X-T5"
+      },
+      "sources": [
+        "https://fujifilm-dsc.com/en/manual/x-t5/technical_notes/spec/"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "pentax",
+      "models": [
+        "PENTAX K-1"
+      ],
+      "names": {
+        "default": "K-1"
+      },
+      "sources": [
+        "https://news.ricoh-imaging.co.jp/rim_info2/2016/20160218_019317.html"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "pentax",
+      "models": [
+        "PENTAX K-1 Mark II"
+      ],
+      "names": {
+        "default": "K-1 Mark II"
+      },
+      "sources": [
+        "https://news.ricoh-imaging.co.jp/rim_info2/2018/20180222_019721.html"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "ricoh",
+      "models": [
+        "RICOH GR III",
+        "GR III"
+      ],
+      "names": {
+        "default": "GR III"
+      },
+      "sources": [
+        "https://www.ricoh-imaging.co.jp/japan/products/gr-3/index.html"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "ricoh",
+      "models": [
+        "RICOH GR IIIx",
+        "GR IIIx"
+      ],
+      "names": {
+        "default": "GR IIIx"
+      },
+      "sources": [
+        "https://www.ricoh-imaging.co.jp/japan/products/gr-3/index.html"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "panasonic",
+      "models": [
+        "DC-S5M2"
+      ],
+      "names": {
+        "default": "LUMIX S5II"
+      },
+      "sources": [
+        "https://help.na.panasonic.com/wp-content/uploads/2023/02/DCS5M2_DVQX2329ZA_ENG.pdf"
+      ],
+      "verifiedOn": "2026-10-28"
+    },
+    {
+      "brand": "panasonic",
+      "models": [
+        "DC-S5M2X"
+      ],
+      "names": {
+        "default": "LUMIX S5IIX"
+      },
+      "sources": [
+        "https://eww.pavc.panasonic.co.jp/dscoi/DC-S5M2X/pdf/DC-S5M2X_DVQP2992_full_eng.pdf"
+      ],
+      "verifiedOn": "2026-10-28"
+    }
+  ]
+}

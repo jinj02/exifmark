@@ -2,6 +2,7 @@ local Settings = {}
 
 Settings.observedKeys = {
     'LR_format', 'LR_enableHDRDisplay', 'LR_jpeg_useLimitSize', 'exifmark_theme', 'exifmark_layout',
+    'exifmark_cameraNameStyle', 'exifmark_cameraCustomName',
 }
 
 function Settings.error(properties, isMac, rendererExists)
@@ -12,6 +13,13 @@ function Settings.error(properties, isMac, rendererExists)
     if properties.LR_jpeg_useLimitSize then return 'exifmark需要追加信息带，请关闭JPEG的“限制文件大小”。' end
     if properties.exifmark_theme ~= 'white' and properties.exifmark_theme ~= 'black' then
         return '请选择白色或黑色背景。'
+    end
+    if properties.exifmark_cameraNameStyle ~= nil and properties.exifmark_cameraNameStyle ~= 'common'
+        and properties.exifmark_cameraNameStyle ~= 'exif' then
+        return '请选择常用名称或EXIF原名。'
+    end
+    if properties.exifmark_cameraCustomName ~= nil and type(properties.exifmark_cameraCustomName) ~= 'string' then
+        return '请输入有效的自定义相机名称。'
     end
     if properties.exifmark_layout ~= nil and properties.exifmark_layout ~= 'bordered'
         and properties.exifmark_layout ~= 'bottomOnly' then

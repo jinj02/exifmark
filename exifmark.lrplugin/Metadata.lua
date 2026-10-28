@@ -69,9 +69,15 @@ function Metadata.read(photo, protectedCall, fallbackDate)
         end
     end
 
+    -- Keep camera identifiers exactly as supplied by the SDK. Display cleanup belongs to rendering.
+    local make = raw('cameraMake')
+    if type(make) ~= 'string' then make = read('getFormattedMetadata', 'cameraMake') end
+    local model = raw('cameraModel')
+    if type(model) ~= 'string' then model = read('getFormattedMetadata', 'cameraModel') end
+
     return {
-        cameraMake = text(raw('cameraMake')),
-        camera = formatted('cameraModel'),
+        cameraMake = type(make) == 'string' and make or '',
+        camera = type(model) == 'string' and model or '',
         lens = lens,
         exposure = table.concat(exposure, ' · '),
         capturedAt = capturedAt,

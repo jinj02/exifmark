@@ -34,6 +34,7 @@ with zipfile.ZipFile(archive) as package:
         'README.txt', 'NOTICE.txt', 'licenses/libjpeg-turbo-LICENSE.md', 'licenses/README.ijg',
         'bin/exifmark-render', 'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-white.pdf',
         'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-black.pdf', 'build-info.json',
+        'bin/ExifmarkRenderer_ExifmarkCore.bundle/CameraNames.json',
     }
     for svg in (root / 'assets').glob('*.svg'):
         for theme in ['black', 'white']:
@@ -67,6 +68,16 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert Image.open(directory/'result.jpg').size == (500,368)
+    # Prove the relocated installation resolves its own catalog, independently of build paths.
+    request['cameraMake'] = 'SONY'; path.write_text(json.dumps(request))
+    result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    mapped_pixels = Image.open(directory/'result.jpg').tobytes()
+    request['cameraCustomName'] = 'α7 IV'; path.write_text(json.dumps(request))
+    result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert Image.open(directory/'result.jpg').tobytes() == mapped_pixels
+    request.pop('cameraCustomName')
     request['layout'] = 'bottomOnly'; path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

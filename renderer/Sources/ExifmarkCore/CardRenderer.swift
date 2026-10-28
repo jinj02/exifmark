@@ -121,7 +121,12 @@ public struct CardRenderer {
         let sideInset = width * 0.01
         let left = CGRect(x: sideInset, y: 0, width: width * 0.475, height: height)
         let right = CGRect(x: width - sideInset - width * 0.225, y: 0, width: width * 0.225, height: height)
-        drawText(request.camera, in: context, frame: left, centerY: height * 0.66,
+        let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+        let make = request.cameraMake.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? (tiff?[kCGImagePropertyTIFFMake as String] as? String ?? "") : request.cameraMake
+        let cameraName = CameraNames.bundled.displayName(make: make, model: request.camera,
+            style: request.cameraNameStyle, customName: request.cameraCustomName)
+        drawText(cameraName, in: context, frame: left, centerY: height * 0.66,
                  size: width * 0.020, weight: .emphasizedSystem, gray: primary, rightAligned: false)
         drawText(request.lens, in: context, frame: left, centerY: height * 0.34,
                  size: width * 0.0135, weight: .system, gray: secondary, rightAligned: false)
@@ -130,10 +135,8 @@ public struct CardRenderer {
         let dateLeft = drawText(request.capturedAt, in: context, frame: right, centerY: height * 0.34,
                                size: width * 0.0135, weight: .system, gray: secondary, rightAligned: true)
 
-        let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
-        let make = request.cameraMake.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let brand = CameraBrand.resolve(
-            make: make.isEmpty ? (tiff?[kCGImagePropertyTIFFMake as String] as? String ?? "") : make,
+            make: make,
             model: request.camera.isEmpty ? (tiff?[kCGImagePropertyTIFFModel as String] as? String ?? "") : request.camera
         ) else { return }
 
