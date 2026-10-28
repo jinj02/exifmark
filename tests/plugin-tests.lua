@@ -47,7 +47,7 @@ equal(Settings.error(valid, true, true), nil)
 equal(Settings.error(valid, false, true) ~= nil, true)
 equal(Settings.error(valid, true, false) ~= nil, true)
 for key, value in pairs({LR_format='TIFF', LR_enableHDRDisplay=true, LR_jpeg_useLimitSize=true,
-    exifmark_theme='invalid', exifmark_layout='invalid', exifmark_cameraNameStyle='invalid', exifmark_cameraCustomName=42}) do
+    exifmark_theme='invalid', exifmark_layout='invalid', exifmark_cameraNameStyle='invalid'}) do
     local p = {}; for k,v in pairs(valid) do p[k] = v end; p[key] = value
     equal(Settings.error(p, true, true) ~= nil, true)
 end
@@ -117,9 +117,13 @@ function props:removeObserver(key) self.callbacks[key]=nil end
 Filter.startDialog(props)
 equal(props.exifmark_theme,'white'); equal(props.LR_cantExportBecause,nil)
 equal(props.exifmark_layout,'bordered')
-equal(props.exifmark_cameraNameStyle,'common'); equal(props.exifmark_cameraCustomName,'')
+equal(props.exifmark_cameraNameStyle,'common'); equal(props.exifmark_cameraCustomName,nil)
+equal(props.callbacks.exifmark_cameraCustomName,nil)
+for _, field in ipairs(Filter.exportPresetFields) do
+    equal(field.key == 'exifmark_cameraCustomName',false)
+end
 -- Simulate Lightroom saving each declared preset field and restoring a fresh dialog.
-props.exifmark_cameraNameStyle, props.exifmark_cameraCustomName = 'exif', '我的相机α7 IV'
+props.exifmark_cameraNameStyle = 'exif'
 local saved = {}
 for _, field in ipairs(Filter.exportPresetFields) do
     saved[field.key] = props[field.key] == nil and field.default or props[field.key]
@@ -128,9 +132,9 @@ saved.callbacks = {}
 saved.addObserver, saved.removeObserver = props.addObserver, props.removeObserver
 saved.LR_format = 'JPEG'
 Filter.startDialog(saved)
-equal(saved.exifmark_cameraNameStyle,'exif'); equal(saved.exifmark_cameraCustomName,'我的相机α7 IV')
+equal(saved.exifmark_cameraNameStyle,'exif'); equal(saved.exifmark_cameraCustomName,nil)
 Filter.endDialog(saved)
-props.exifmark_cameraNameStyle, props.exifmark_cameraCustomName = 'common', ''
+props.exifmark_cameraNameStyle = 'common'
 props.exifmark_cameraNameStyle='invalid'; props.callbacks.exifmark_cameraNameStyle()
 equal(props.LR_cantExportBecause ~= nil,true)
 props.exifmark_cameraNameStyle='common'; props.callbacks.exifmark_cameraNameStyle()
@@ -215,11 +219,12 @@ equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
 equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraMake":"SONY"',1,true) ~= nil,true)
 equal(requestPayload:find('"cameraNameStyle":"common"',1,true) ~= nil,true)
-equal(requestPayload:find('"cameraCustomName":""',1,true) ~= nil,true)
+equal(requestPayload:find('"cameraCustomName"',1,true),nil)
 destinations=runExport({cameraNameStyle='exif',cameraCustomName='我的相机α7 IV'})
 for _,d in ipairs(destinations) do equal(d.ok,true) end
 equal(requestPayload:find('"cameraNameStyle":"exif"',1,true) ~= nil,true)
-equal(requestPayload:find('"cameraCustomName":"我的相机α7 IV"',1,true) ~= nil,true)
+-- Custom names retained by older presets must not reach the renderer.
+equal(requestPayload:find('"cameraCustomName"',1,true),nil)
 equal(requestPayload:find('"camera":"ILCE-7M4"',1,true) ~= nil,true)
 destinations=runExport({layout='bottomOnly'})
 for _,d in ipairs(destinations) do equal(d.ok,true) end

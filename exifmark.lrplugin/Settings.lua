@@ -2,7 +2,7 @@ local Settings = {}
 
 Settings.observedKeys = {
     'LR_format', 'LR_enableHDRDisplay', 'LR_jpeg_useLimitSize', 'exifmark_theme', 'exifmark_layout',
-    'exifmark_cameraNameStyle', 'exifmark_cameraCustomName',
+    'exifmark_cameraNameStyle',
 }
 
 function Settings.error(properties, isMac, rendererExists)
@@ -17,9 +17,6 @@ function Settings.error(properties, isMac, rendererExists)
     if properties.exifmark_cameraNameStyle ~= nil and properties.exifmark_cameraNameStyle ~= 'common'
         and properties.exifmark_cameraNameStyle ~= 'exif' then
         return '请选择常用名称或EXIF原名。'
-    end
-    if properties.exifmark_cameraCustomName ~= nil and type(properties.exifmark_cameraCustomName) ~= 'string' then
-        return '请输入有效的自定义相机名称。'
     end
     if properties.exifmark_layout ~= nil and properties.exifmark_layout ~= 'bordered'
         and properties.exifmark_layout ~= 'bottomOnly' then

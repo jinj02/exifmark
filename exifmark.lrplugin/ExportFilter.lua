@@ -36,7 +36,6 @@ function Filter.startDialog(properties)
     if properties.exifmark_theme == nil then properties.exifmark_theme = 'white' end
     if properties.exifmark_layout == nil then properties.exifmark_layout = 'bordered' end
     if properties.exifmark_cameraNameStyle == nil then properties.exifmark_cameraNameStyle = 'common' end
-    if properties.exifmark_cameraCustomName == nil then properties.exifmark_cameraCustomName = '' end
     for _, key in ipairs(Settings.observedKeys) do
         properties:addObserver(key, Filter, function() updateStatus(properties) end)
     end
@@ -83,12 +82,6 @@ function Filter.sectionForFilterInDialog(f, properties)
                 width_in_chars = 12,
             },
         },
-        f:row {
-            f:static_text { title = '自定义名称：' },
-            f:edit_field { value = LrView.bind 'exifmark_cameraCustomName', width_in_chars = 30 },
-        },
-        f:static_text { title = '自定义名称优先用于本次批量导出的所有照片，留空则使用上方命名方式。',
-            width_in_chars = 48, height_in_lines = 2, wrap = true },
         f:static_text {
             title = LrView.bind 'exifmark_status',
             width_in_chars = 48, height_in_lines = 2, wrap = true,
@@ -165,7 +158,6 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                     layout = properties.exifmark_layout or 'bordered',
                     cameraMake = fields.cameraMake, camera = fields.camera, lens = fields.lens,
                     cameraNameStyle = properties.exifmark_cameraNameStyle or 'common',
-                    cameraCustomName = properties.exifmark_cameraCustomName or '',
                     exposure = fields.exposure, capturedAt = fields.capturedAt,
                     quality = properties.LR_jpeg_quality or 0.9,
                 })
@@ -191,6 +183,5 @@ Filter.exportPresetFields = {
     { key = 'exifmark_theme', default = 'white' },
     { key = 'exifmark_layout', default = 'bordered' },
     { key = 'exifmark_cameraNameStyle', default = 'common' },
-    { key = 'exifmark_cameraCustomName', default = '' },
 }
 return Filter
