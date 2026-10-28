@@ -1,6 +1,10 @@
 <div align="center">
 
-# exifmark
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme-header-dark-v2.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/readme-header-light-v2.png">
+  <img src="docs/readme-header-light-v2.png" alt="exifmark — SONY α7R VI · FE 24-70mm F2.8 GM II · 35mm · f/8 · 1/250s · ISO 100" width="100%">
+</picture>
 
 **为 Lightroom Classic 导出的照片自动生成 EXIF 参数边框卡片**
 
