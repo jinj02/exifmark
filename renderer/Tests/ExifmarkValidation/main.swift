@@ -184,6 +184,40 @@ final class CardRendererTests {
         throwsError(try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.replacingOccurrences(of: #""quality":0.9"#, with: #""quality":0.9,"cameraNameStyle":"invalid""#).utf8)))
     }
 
+    func testCameraWatermarkNames() throws {
+        let names = CameraNames.bundled
+        for (make, model, expected) in [
+            ("SONY", "ILCE-7RM4A", "SONY α7R IVA"), ("SONY", "ILCE-9M3", "SONY α9 III"),
+            ("SONY", "ILCE-1M2", "SONY α1 II"), ("SONY", "ILCE-42RM14A", "SONY α42R XIVA"),
+            ("SONY", "SONY ILCE-7M4", "SONY α7 IV"), ("SONY", "SONY α7 IV", "SONY α7 IV"),
+            ("Canon", "Canon EOS R5", "Canon EOS R5"), ("NIKON CORPORATION", "NIKON Z 8", "Nikon Z 8"),
+            ("FUJIFILM", "X-T5", "FUJIFILM X-T5"),
+            ("RICOH IMAGING COMPANY, LTD.", "PENTAX K-1", "PENTAX K-1"),
+            ("RICOH IMAGING COMPANY, LTD.", "GR IIIx", "RICOH GR IIIx"),
+            ("Panasonic", "DC-S5M2", "Panasonic LUMIX S5II"), ("LUMIX", "LUMIX S5II", "LUMIX S5II"),
+            ("Phase One A/S", "IQ4", "Phase One A/S IQ4"),
+            ("ACME", "Camera X", "ACME Camera X"), ("ACME", "acme Camera X", "acme Camera X"),
+            ("Acme SONY compatible", "ILCE-7M4", "Acme SONY compatible ILCE-7M4"),
+            ("SONY", "SONYish Camera", "SONY SONYish Camera"),
+            ("  sony\n", "ILCE-7M4", "SONY α7 IV"), ("", "Camera X", "Camera X"),
+            ("", "ILCE-7M4", "SONY ILCE-7M4"), ("SONY", "", ""), ("SONY", " \n", " \n"),
+        ] {
+            equal(names.watermarkName(make: make, model: model), expected)
+        }
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7RM4A", style: .exif), "SONY ILCE-7RM4A")
+        equal(names.watermarkName(make: "Canon", model: "Canon EOS R5", style: .exif), "Canon EOS R5")
+        equal(names.watermarkName(make: "NIKON CORPORATION", model: "NIKON Z 8", style: .exif), "NIKON Z 8")
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7M0"), "SONY ILCE-7M0")
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7M4", customName: "我的相机"), "我的相机")
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7M4", customName: "SONY α7 IV"), "SONY α7 IV")
+        equal(names.watermarkName(make: "SONY", model: "ILCE-7M4", customName: " \n"), "SONY α7 IV")
+        for brand in CameraBrand.allCases {
+            let label = brand.displayName
+            equal(names.watermarkName(make: brand.rawValue, model: "Camera X"), label + " Camera X")
+            equal(names.watermarkName(make: brand.rawValue, model: label + " Camera X"), label + " Camera X")
+        }
+    }
+
     func testSonyCameraNameRules() throws {
         let names = CameraNames.bundled
         // Representatives of the supported mirrorless families, including historical NEX cameras.
@@ -362,6 +396,7 @@ let cases: [(String, () throws -> Void)] = [
     ("dimensions and themes", suite.testDimensionsAcrossAspectRatiosAndThemes),
     ("camera brands and legacy requests", suite.testCameraBrandResolution),
     ("camera display names and settings compatibility", suite.testCameraNames),
+    ("manufacturer prefixes and deduplication", suite.testCameraWatermarkNames),
     ("Sony camera family regex rules", suite.testSonyCameraNameRules),
     ("Sony future camera syntax without a product table", suite.testSonyFutureCameraNameRules),
     ("eight orientations", suite.testAllEightOrientationsAreNormalized),

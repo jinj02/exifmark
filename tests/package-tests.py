@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     mapped_pixels = Image.open(directory/'result.jpg').tobytes()
-    request['cameraCustomName'] = 'α7 IV'; path.write_text(json.dumps(request))
+    request['cameraCustomName'] = 'SONY α7 IV'; path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert Image.open(directory/'result.jpg').tobytes() == mapped_pixels

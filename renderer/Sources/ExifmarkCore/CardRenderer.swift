@@ -124,7 +124,7 @@ public struct CardRenderer {
         let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
         let make = request.cameraMake.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? (tiff?[kCGImagePropertyTIFFMake as String] as? String ?? "") : request.cameraMake
-        let cameraName = CameraNames.bundled.displayName(make: make, model: request.camera,
+        let cameraName = CameraNames.bundled.watermarkName(make: make, model: request.camera,
             style: request.cameraNameStyle, customName: request.cameraCustomName)
         drawText(cameraName, in: context, frame: left, centerY: height * 0.66,
                  size: width * 0.020, weight: .emphasizedSystem, gray: primary, rightAligned: false)

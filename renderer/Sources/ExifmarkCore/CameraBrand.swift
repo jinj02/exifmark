@@ -4,6 +4,26 @@ public enum CameraBrand: String, CaseIterable {
     case sony, canon, nikon, fujifilm, leica, panasonic, lumix, pentax, ricoh
     case hasselblad, sigma, dji, kodak, phaseone, olympus
 
+    public var displayName: String {
+        switch self {
+        case .sony: return "SONY"
+        case .canon: return "Canon"
+        case .nikon: return "Nikon"
+        case .fujifilm: return "FUJIFILM"
+        case .leica: return "Leica"
+        case .panasonic: return "Panasonic"
+        case .lumix: return "LUMIX"
+        case .pentax: return "PENTAX"
+        case .ricoh: return "RICOH"
+        case .hasselblad: return "Hasselblad"
+        case .sigma: return "SIGMA"
+        case .dji: return "DJI"
+        case .kodak: return "Kodak"
+        case .phaseone: return "Phase One"
+        case .olympus: return "OLYMPUS"
+        }
+    }
+
     public static func resolve(make: String, model: String) -> CameraBrand? {
         func words(_ value: String) -> [String] {
             value.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)

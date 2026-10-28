@@ -27,6 +27,7 @@ public struct CameraNames {
 
     private var names: [Key: [String: String]] = [:]
     private var sonyMakes: Set<String> = []
+    private var knownMakes: Set<String> = []
 
     public static let bundled: CameraNames = {
         // Resolve at the installed executable, without depending on build-machine resource paths.
@@ -46,6 +47,7 @@ public struct CameraNames {
         let catalog = try JSONDecoder().decode(Catalog.self, from: data)
         guard catalog.version == 1 else { throw RenderError.invalid("相机名称映射版本无效。") }
         sonyMakes = Set((catalog.brands["sony"] ?? []).map(Self.normalize))
+        knownMakes = Set(catalog.brands.values.flatMap { $0 }.map(Self.normalize))
         for entry in catalog.entries {
             guard let makes = catalog.brands[entry.brand], !makes.isEmpty, !entry.models.isEmpty,
                   let fallback = entry.names["default"], !Self.normalize(fallback).isEmpty,
@@ -70,11 +72,37 @@ public struct CameraNames {
         value.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ").lowercased()
     }
 
+    private static func singleLine(_ value: String) -> String {
+        value.components(separatedBy: .controlCharacters).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Compose the watermark label while keeping model resolution and retained EXIF fields separate.
+    public func watermarkName(make: String, model: String, style: CameraNameStyle = .common,
+                              customName: String = "", language: String = "zh-CN") -> String {
+        let camera = displayName(make: make, model: model, style: style, customName: customName, language: language)
+        // A custom name is the complete user-supplied label.
+        if !Self.singleLine(customName).isEmpty { return camera }
+        let text = Self.singleLine(camera)
+        guard !text.isEmpty else { return camera }
+        let manufacturer = Self.singleLine(make)
+        let brand = CameraBrand.resolve(make: make, model: model)
+        let knownMake = knownMakes.contains(Self.normalize(make)) || CameraBrand.allCases.contains {
+            Self.normalize(make) == $0.rawValue || Self.normalize(make) == Self.normalize($0.displayName)
+        }
+        // Keep an unrecognized manufacturer's text intact instead of inferring from a word within it.
+        let prefix = (knownMake || manufacturer.isEmpty) ? (brand?.displayName ?? manufacturer) : manufacturer
+        guard !prefix.isEmpty else { return camera }
+        let normalized = Self.normalize(text)
+        let normalizedPrefix = Self.normalize(prefix)
+        if normalized == normalizedPrefix || normalized.hasPrefix(normalizedPrefix + " ") { return camera }
+        return prefix + " " + text
+    }
+
     public func displayName(make: String, model: String, style: CameraNameStyle = .common,
                             customName: String = "", language: String = "zh-CN") -> String {
         // Single-line display cleanup does not alter the retained EXIF fields.
-        let custom = customName.components(separatedBy: .controlCharacters).joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let custom = Self.singleLine(customName)
         if !custom.isEmpty { return custom }
         guard style == .common else { return model }
         let make = Self.normalize(make)
