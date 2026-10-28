@@ -27,6 +27,7 @@
   - **三边留白 + 底部参数栏（默认）**：上、左、右各追加照片宽度 `2%` 的留白边框，底部追加 `8%` 的参数栏。
   - **仅底部参数栏**：照片上、左、右三边贴边，仅底部追加照片宽度 `8%` 的参数栏。
 - **保留照片压缩数据**：所有外框与参数栏均向外扩展画布，直接复制LrC导出JPEG的量化DCT系数，照片区域免于二次有损编码。边框位置和照片占位向上对齐JPEG的MCU块，末端不足整块的部分保留原有块并向外补齐。
+- **相机品牌识别**：根据相机厂商自动选择SONY、Canon、Nikon、FUJIFILM、Leica、Panasonic、LUMIX、PENTAX、RICOH、Hasselblad、SIGMA、DJI、Kodak、OLYMPUS或Phase One字标，适配黑白主题；未知品牌留空。
 - **智能排版与防溢出**：字号、Logo 与边距随照片宽度同比缩放；过长的相机或镜头名称会自动缩字（最低至 `75%`）并在超宽时优雅省略；缺失的 EXIF 字段自动留空。
 - **色彩与隐私安全**：
   - LrC按导出窗口中的质量输出JPEG。新增边框和参数栏使用这张JPEG的实际量化表、色度采样与分量配置进行压缩，再拼接原照片的量化系数并优化熵编码。整个流程无需TIFF中转或临时入库，继承原JPEG的ICC配置。
@@ -79,5 +80,5 @@
 ## 📄 声明与致谢
 
 - JPEG处理静态链接[libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo)，许可证随插件放在`licenses/`。This software is based in part on the work of the Independent JPEG Group.
-- 内置 `SONY` 矢量字标源自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Sony_logo.svg)，相关商标与名称权利归 Sony Group Corporation 所有。详见 [资源说明 (assets/NOTICE.md)](assets/NOTICE.md)。
-- 本项目为独立开发的开源工具，与 Sony 及 Adobe Inc. 无隶属、赞助或官方合作关系。
+- 内置相机品牌字标来自厂商官网、Wikimedia Commons、Simple Icons及Camera-Logos-SVG，相关商标与名称权利归各自权利人所有。详见[资源说明](assets/NOTICE.md)。
+- 本项目为独立开发的开源工具，与相机厂商及Adobe Inc.无隶属、赞助或官方合作关系。

@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                 # The reserved gap remains empty with long camera/lens strings.
                 output = directory / f'overflow-{theme}-{orientation}-{layout}.jpg'
                 result = render(directory, source, output, theme=theme, layout=layout,
-                                camera='超长相机型号'*50, lens='LONG镜头'*100, exposure='f/22 · 1/8000s · ISO 102400')
+                                cameraMake='SONY', camera='超长相机型号'*50, lens='LONG镜头'*100, exposure='f/22 · 1/8000s · ISO 102400')
                 check(result.returncode == 0, result.stderr)
                 actual = ImageOps.exif_transpose(Image.open(output))
                 gap_x = border + int(expected.width * 0.55)
@@ -146,6 +146,47 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
         result = render(directory, source, output, camera='', lens='', exposure='', capturedAt='')
         check(result.returncode == 0, result.stderr)
         check(source.read_bytes() == before, 'Input modified')
+
+    # Compare actual footer pixels to verify selection through both rendering paths.
+    brands = [svg.stem for svg in sorted((ROOT / 'assets').glob('*.svg'))]
+    for extension in ['tif', 'jpg']:
+        source = directory / ('brands.' + extension)
+        Image.new('RGB', (1200, 800), (60, 100, 140)).save(source)
+        for theme, gray in [('white', 255), ('black', 0)]:
+            samples = {}
+            for brand in brands + ['unknown']:
+                output = directory / f'{brand}-{theme}-{extension}.tif'
+                result = render(directory, source, output, theme=theme, layout='bottomOnly',
+                                cameraMake=brand, camera='', lens='', exposure='', capturedAt='')
+                check(result.returncode == 0, result.stderr)
+                with Image.open(output) as image:
+                    footer = image.crop((0, 800, 1200, image.height)).convert('RGB')
+                    delta = ImageChops.difference(footer, Image.new('RGB', footer.size, (gray,)*3))
+                    box = delta.getbbox()
+                    if brand == 'unknown':
+                        check(box is None, 'Unknown manufacturer must leave brand region empty')
+                    else:
+                        check(box is not None, f'Missing {brand} logo')
+                        logo_box = delta.crop((600, 0, 890, footer.height)).getbbox()
+                        check(logo_box is not None and logo_box[2] - logo_box[0] >= 32,
+                              f'{brand} was not scaled up to its display size')
+                        check(box[1] >= 20 and box[3] <= 76, f'{brand} exceeds footer height')
+                        samples[brand] = footer.crop((600, 0, 1200, footer.height)).tobytes()
+            check(len(set(samples.values())) == len(brands), 'Manufacturers rendered duplicate logos')
+            # TIFF Make, explicit catalog Make and model-only legacy requests.
+            exif = Image.Exif(); exif[271] = 'Canon'; exif[272] = 'Canon EOS R5'
+            Image.new('RGB', (1200, 800), (60, 100, 140)).save(source, exif=exif)
+            for fields, expected in [({}, 'canon'), ({'cameraMake': 'NIKON CORPORATION'}, 'nikon'),
+                                     ({'cameraMake': 'RICOH IMAGING COMPANY, LTD.', 'camera': 'PENTAX K-1'}, 'pentax')]:
+                output = directory / 'selected.tif'
+                request_fields = dict(camera='', lens='', exposure='', capturedAt='')
+                request_fields.update(fields)
+                result = render(directory, source, output, theme=theme, layout='bottomOnly', **request_fields)
+                check(result.returncode == 0, result.stderr)
+                with Image.open(output) as image:
+                    check(image.crop((600, 800, 1200, image.height)).convert('RGB').tobytes() == samples[expected],
+                          f'Wrong brand selection for {fields}')
+            Image.new('RGB', (1200, 800), (60, 100, 140)).save(source)
 
     source = directory / 'orientation-1.jpg'
     output = directory / 'existing.jpg'

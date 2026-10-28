@@ -1,8 +1,14 @@
-SONY字标来源：
-https://commons.wikimedia.org/wiki/File:Sony_logo.svg
+相机品牌字标的相关权利归各自权利人所有。字标仅用于照片卡片上的品牌标识。
+exifmark与相机厂商及Adobe无隶属、赞助或官方合作关系。
 
-SONY名称及字标属于Sony。字标仅用于照片卡片上的品牌标识。
-exifmark与Sony、Adobe无隶属或赞助关系。
+内置品牌：SONY、Canon、Nikon、FUJIFILM、Leica、Panasonic、LUMIX、PENTAX、RICOH、Hasselblad、SIGMA、DJI、Kodak、OLYMPUS、Phase One。
 
-内置字标PDF来自原始SVG的矢量路径，分别使用黑色和白色填充。
-字标资源的权利与插件源码分开处理。
+资源来源：
+SONY：https://commons.wikimedia.org/wiki/File:Sony_logo.svg
+Canon：https://myid.canon/prd/1.1.38.1/canonid-assets/svg/Canon.svg
+OLYMPUS：https://cdn.aws.olympus.eu/static/img/logo/olympus-logo.svg
+PENTAX：https://pentax.eu/cdn/shop/files/dark-logo.svg?v=10704441403078636815
+Nikon、FUJIFILM、Leica、Panasonic、DJI、Kodak：https://github.com/simple-icons/simple-icons（图标集采用CC0-1.0；不授予商标权）
+LUMIX、RICOH、SIGMA、Hasselblad、Phase One：https://github.com/HiSeatown/Camera-Logos-SVG
+
+SVG源文件及详细说明：https://github.com/jinj02/exifmark/blob/main/assets/NOTICE.md

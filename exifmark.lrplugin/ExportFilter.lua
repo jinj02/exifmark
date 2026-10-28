@@ -147,7 +147,7 @@ function Filter.postProcessRenderedPhotos(functionContext, filterContext)
                     output = destination.destinationPath,
                     theme = properties.exifmark_theme,
                     layout = properties.exifmark_layout or 'bordered',
-                    camera = fields.camera, lens = fields.lens,
+                    cameraMake = fields.cameraMake, camera = fields.camera, lens = fields.lens,
                     exposure = fields.exposure, capturedAt = fields.capturedAt,
                     quality = properties.LR_jpeg_quality or 0.9,
                 })

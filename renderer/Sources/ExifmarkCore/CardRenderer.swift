@@ -64,7 +64,7 @@ public struct CardRenderer {
         if footerHeight > 0 {
             context.saveGState()
             context.translateBy(x: CGFloat(border), y: 0)
-            try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request)
+            try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request, properties: properties)
             context.restoreGState()
         }
         guard let card = context.makeImage() else { throw RenderError.allocation }
@@ -114,7 +114,8 @@ public struct CardRenderer {
         }
     }
 
-    func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest) throws {
+    func drawFooter(in context: CGContext, width: CGFloat, height: CGFloat, request: RenderRequest,
+                    properties: [String: Any]) throws {
         let primary: CGFloat = request.theme == .white ? 0.075 : 0.97
         let secondary: CGFloat = request.theme == .white ? 0.46 : 0.65
         let sideInset = width * 0.01
@@ -129,6 +130,13 @@ public struct CardRenderer {
         let dateLeft = drawText(request.capturedAt, in: context, frame: right, centerY: height * 0.34,
                                size: width * 0.0135, weight: .system, gray: secondary, rightAligned: true)
 
+        let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any]
+        let make = request.cameraMake.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let brand = CameraBrand.resolve(
+            make: make.isEmpty ? (tiff?[kCGImagePropertyTIFFMake as String] as? String ?? "") : make,
+            model: request.camera.isEmpty ? (tiff?[kCGImagePropertyTIFFModel as String] as? String ?? "") : request.camera
+        ) else { return }
+
         let separatorWidth = max(1, (width * 0.001).rounded())
         let separatorHeight = (height * 0.42).rounded()
         let textLeft = [exposureLeft, dateLeft].compactMap { $0 }.min() ?? right.minX
@@ -139,7 +147,7 @@ public struct CardRenderer {
                             y: ((height - separatorHeight) / 2).rounded(),
                             width: separatorWidth, height: separatorHeight))
 
-        let name = request.theme == .white ? "sony-black" : "sony-white"
+        let name = "\(brand.rawValue)-\(request.theme == .white ? "black" : "white")"
         // Resolve beside the executable so distribution never relies on a build-machine path.
         guard let executable = Bundle.main.executableURL,
               let resources = Bundle(url: executable.deletingLastPathComponent()
@@ -149,12 +157,17 @@ public struct CardRenderer {
             throw RenderError.logo
         }
         let bounds = page.getBoxRect(.mediaBox)
-        let logoWidth = width * 0.112
-        let logoHeight = logoWidth * bounds.height / bounds.width
+        guard bounds.width > 0, bounds.height > 0 else { throw RenderError.logo }
+        let scale = min(width * 0.112 / bounds.width, height * 0.52 / bounds.height)
+        let logoWidth = bounds.width * scale
+        let logoHeight = bounds.height * scale
         let rect = CGRect(x: separatorX - width * 0.018 - logoWidth, y: (height - logoHeight) / 2,
                           width: logoWidth, height: logoHeight)
         context.saveGState()
-        context.concatenate(page.getDrawingTransform(.mediaBox, rect: rect, rotate: 0, preserveAspectRatio: true))
+        // Scale explicitly: CGPDFPage's fit transform does not enlarge small SVG view boxes.
+        context.translateBy(x: rect.minX, y: rect.minY)
+        context.scaleBy(x: rect.width / bounds.width, y: rect.height / bounds.height)
+        context.translateBy(x: -bounds.minX, y: -bounds.minY)
         context.drawPDFPage(page)
         context.restoreGState()
     }

@@ -35,6 +35,9 @@ with zipfile.ZipFile(archive) as package:
         'bin/exifmark-render', 'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-white.pdf',
         'bin/ExifmarkRenderer_ExifmarkCore.bundle/sony-black.pdf', 'build-info.json',
     }
+    for svg in (root / 'assets').glob('*.svg'):
+        for theme in ['black', 'white']:
+            required.add(f'bin/ExifmarkRenderer_ExifmarkCore.bundle/{svg.stem}-{theme}.pdf')
     assert {'exifmark.lrplugin/' + name for name in required} <= set(package.namelist())
     information = json.loads(package.read('exifmark.lrplugin/build-info.json'))
     packaged_version = parse_version(package.read('exifmark.lrplugin/Info.lua').decode())
@@ -82,6 +85,6 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     shutil.rmtree(binary.parent/'ExifmarkRenderer_ExifmarkCore.bundle')
     request['output'] = str(directory/'missing-logo.jpg'); path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
-    assert result.returncode == 1 and 'SONY' in result.stderr, result.stderr
+    assert result.returncode == 1 and '字标资源' in result.stderr, result.stderr
     assert not (directory/'missing-logo.jpg').exists()
 print(f'Package validation: {platform.machine()}, version, checksum, signatures, both architectures, relocated render and missing resources passed')

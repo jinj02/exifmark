@@ -54,7 +54,7 @@ extension CardRenderer {
         context.fill(CGRect(x: 0, y: 0, width: rawWidth, height: rawHeight))
         context.concatenate(transform)
         context.translateBy(x: CGFloat(borderX), y: 0)
-        try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request)
+        try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request, properties: properties)
 
         let outputURL = URL(fileURLWithPath: request.output)
         let directory = outputURL.deletingLastPathComponent()

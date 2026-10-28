@@ -70,6 +70,7 @@ function Metadata.read(photo, protectedCall, fallbackDate)
     end
 
     return {
+        cameraMake = text(raw('cameraMake')),
         camera = formatted('cameraModel'),
         lens = lens,
         exposure = table.concat(exposure, ' · '),

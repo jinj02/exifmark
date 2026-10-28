@@ -118,6 +118,24 @@ final class CardRendererTests {
         }
     }
 
+    func testCameraBrandResolution() throws {
+        for brand in CameraBrand.allCases {
+            equal(CameraBrand.resolve(make: brand.rawValue.uppercased(), model: ""), brand)
+            equal(CameraBrand.resolve(make: "", model: brand.rawValue + " Model"), brand)
+        }
+        equal(CameraBrand.resolve(make: "NIKON CORPORATION", model: "Z 8"), .nikon)
+        equal(CameraBrand.resolve(make: "RICOH IMAGING COMPANY, LTD.", model: "PENTAX K-1"), .pentax)
+        equal(CameraBrand.resolve(make: "Phase One A/S", model: "IQ4"), .phaseone)
+        equal(CameraBrand.resolve(make: "", model: "ILCE-7M4"), .sony)
+        isNil(CameraBrand.resolve(make: "Unknown", model: "ILCE-7M4"))
+        isNil(CameraBrand.resolve(make: "", model: "Acme Canon-compatible camera"))
+        isNil(CameraBrand.resolve(make: "", model: ""))
+        let legacy = """
+        {"version":1,"input":"/source.tif","output":"/output.jpg","theme":"white",        "camera":"ILCE-7M4","lens":"","exposure":"","capturedAt":"","quality":0.9}
+        """
+        equal(try JSONDecoder().decode(RenderRequest.self, from: Data(legacy.utf8)).cameraMake, "")
+    }
+
     func testAllEightOrientationsAreNormalized() throws {
         for orientation in 1...8 {
             let input = try fixture(orientation: orientation)
@@ -227,6 +245,7 @@ final class CardRendererTests {
 let suite = CardRendererTests()
 let cases: [(String, () throws -> Void)] = [
     ("dimensions and themes", suite.testDimensionsAcrossAspectRatiosAndThemes),
+    ("camera brands and legacy requests", suite.testCameraBrandResolution),
     ("eight orientations", suite.testAllEightOrientationsAreNormalized),
     ("metadata and AdobeRGB", suite.testAllowedMetadataAndAdobeRGBProfileSurvive),
     ("stripped GPS", suite.testStrippedGPSIsNotReintroducedByVisibleFields),

@@ -14,6 +14,7 @@ public struct RenderRequest: Codable {
     public var output: String
     public var theme: Theme
     public var layout: Layout
+    public var cameraMake: String
     public var camera: String
     public var lens: String
     public var exposure: String
@@ -22,13 +23,14 @@ public struct RenderRequest: Codable {
     public var quality: Double
 
     public init(input: String, output: String, theme: Theme = .white, layout: Layout = .bordered,
-                camera: String = "", lens: String = "", exposure: String = "",
+                cameraMake: String = "", camera: String = "", lens: String = "", exposure: String = "",
                 capturedAt: String = "", quality: Double = 0.9) {
         self.version = 1
         self.input = input
         self.output = output
         self.theme = theme
         self.layout = layout
+        self.cameraMake = cameraMake
         self.camera = camera
         self.lens = lens
         self.exposure = exposure
@@ -37,7 +39,7 @@ public struct RenderRequest: Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, input, output, theme, layout, camera, lens, exposure, capturedAt, quality
+        case version, input, output, theme, layout, cameraMake, camera, lens, exposure, capturedAt, quality
     }
 
     public init(from decoder: Decoder) throws {
@@ -47,6 +49,7 @@ public struct RenderRequest: Codable {
         output = try values.decode(String.self, forKey: .output)
         theme = try values.decode(Theme.self, forKey: .theme)
         layout = try values.decodeIfPresent(Layout.self, forKey: .layout) ?? .bordered
+        cameraMake = try values.decodeIfPresent(String.self, forKey: .cameraMake) ?? ""
         camera = try values.decode(String.self, forKey: .camera)
         lens = try values.decode(String.self, forKey: .lens)
         exposure = try values.decode(String.self, forKey: .exposure)
@@ -86,7 +89,7 @@ public enum RenderError: Error, LocalizedError {
         case .invalid(let message): return message
         case .input: return "无法读取输入图片，文件可能损坏或格式不受支持。"
         case .allocation: return "图片过大或可用内存不足，无法创建画布。"
-        case .logo: return "SONY字标资源缺失或损坏，请重新安装完整插件。"
+        case .logo: return "相机品牌字标资源缺失或损坏，请重新安装完整插件。"
         case .output: return "无法编码图像，请检查导出目录和可用空间。"
         case .write(let message): return "无法保存图像：\(message)"
         }

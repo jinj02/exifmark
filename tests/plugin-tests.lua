@@ -14,18 +14,19 @@ equal(Metadata.shutter(nil), '')
 equal(Metadata.captureTime('2026-10-27T09:41:35+09:00'), '2026.10.27 09:41')
 equal(Metadata.captureTime('2026-10-27T09:41:35-07:00'), '2026.10.27 09:41')
 equal(Metadata.captureTime(nil), '')
-local raw = { aperture = 2.8, shutterSpeed = 1/250, isoSpeedRating = 100,
+local raw = { cameraMake = 'SONY', aperture = 2.8, shutterSpeed = 1/250, isoSpeedRating = 100,
     focalLength = 35, dateTimeOriginalISO8601 = '2026-10-27T09:41:35+09:00' }
 local formatted = { cameraModel = 'ILCE-7M4', lens = 'FE 24-70mm F2.8 GM II' }
 local photo = {getRawMetadata = function(_, key) return raw[key] end,
     getFormattedMetadata = function(_, key) return formatted[key] end}
 local fields = Metadata.read(photo)
+equal(fields.cameraMake, 'SONY')
 equal(fields.camera, 'ILCE-7M4')
 equal(fields.lens, 'FE 24-70mm F2.8 GM II · 35mm')
 equal(fields.exposure, 'f/2.8 · 1/250s · ISO 100')
 equal(fields.capturedAt, '2026.10.27 09:41')
 local missing = Metadata.read({getRawMetadata = function() error('missing') end, getFormattedMetadata = function() end})
-for _, key in ipairs({'camera','lens','exposure','capturedAt'}) do equal(missing[key], '') end
+for _, key in ipairs({'cameraMake','camera','lens','exposure','capturedAt'}) do equal(missing[key], '') end
 raw.aperture, raw.shutterSpeed = nil, nil
 equal(Metadata.read(photo).exposure, 'ISO 100')
 raw.aperture, raw.shutterSpeed = 2.8, 1/250
@@ -183,6 +184,7 @@ equal(executionCount,3)
 equal(read(scratch .. '/out-1.jpg'),'LrC JPEG quality=0.9 + compressed footer')
 equal(requestPayload:find('f/2.8 · 1/250s · ISO 100',1,true) ~= nil,true)
 equal(requestPayload:find('"layout":"bordered"',1,true) ~= nil,true)
+equal(requestPayload:find('"cameraMake":"SONY"',1,true) ~= nil,true)
 destinations=runExport({layout='bottomOnly'})
 for _,d in ipairs(destinations) do equal(d.ok,true) end
 equal(requestPayload:find('"layout":"bottomOnly"',1,true) ~= nil,true)
