@@ -37,7 +37,8 @@ public struct CardRenderer {
         let photoHeight = swap ? image.width : image.height
         // Use the oriented photo width for both layouts, including portrait images.
         let border = request.layout == .bordered ? Int((Double(photoWidth) * 0.02).rounded()) : 0
-        let footerHeight = Int((Double(photoWidth) * 0.08).rounded())
+        let footerRatio = photoHeight > photoWidth ? 0.10 : 0.08
+        let footerHeight = Int((Double(photoWidth) * footerRatio).rounded())
         let width = photoWidth + border * 2
         let height = photoHeight + border + footerHeight
         guard width > 0, photoHeight > 0, width <= 65535, height <= 65535,

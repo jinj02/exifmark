@@ -96,7 +96,7 @@ final class CardRendererTests {
     }
 
     func testDimensionsAcrossAspectRatiosAndThemes() throws {
-        for (width, height) in [(1200, 800), (800, 1200), (1600, 400), (320, 240), (667, 1000), (17, 11)] {
+        for (width, height) in [(1200, 800), (800, 1200), (800, 800), (1600, 400), (320, 240), (667, 1000), (17, 11)] {
             let input = try fixture(width: width, height: height)
             for theme in [Theme.white, .black] {
                 for layout in [Layout.bordered, .bottomOnly] {
@@ -107,7 +107,7 @@ final class CardRendererTests {
                         exposure: "f/2.8 · 1/8000s · ISO 102400", capturedAt: "2026.10.27 09:41"))
                     let actual = try properties(output)
                     let border = layout == .bordered ? Int((Double(width) * 0.02).rounded()) : 0
-                    let footer = Int((Double(width) * 0.08).rounded())
+                    let footer = Int((Double(width) * (height > width ? 0.10 : 0.08)).rounded())
                     equal(result.width, width + border * 2)
                     equal(result.height, height + border + footer)
                     equal(result.footerHeight, footer)
@@ -315,7 +315,7 @@ final class CardRendererTests {
                 let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path, layout: layout))
                 let bordered = layout == .bordered
                 equal(result.width, orientation >= 5 ? (bordered ? 250 : 240) : (bordered ? 332 : 320))
-                equal(result.height, orientation >= 5 ? (bordered ? 344 : 339) : (bordered ? 272 : 266))
+                equal(result.height, orientation >= 5 ? (bordered ? 349 : 344) : (bordered ? 272 : 266))
                 let actual = try properties(output)
                 equal(actual[kCGImagePropertyOrientation as String] as? Int ?? 1, 1)
                 let exif = actual[kCGImagePropertyExifDictionary as String] as? [String: Any]

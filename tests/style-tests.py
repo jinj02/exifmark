@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
         photo.save(source)
         card, result, _ = render(folder, source, theme=theme, watermarkStyle=style, layout=layout)
         border = round(size[0]*0.02) if layout == 'bordered' else 0
-        footer = math.floor(size[0]*0.08+0.5)
+        footer = math.floor(size[0]*(0.10 if size[1] > size[0] else 0.08)+0.5)
         check(card.size == (size[0]+2*border, size[1]+border+footer), 'Style changed canvas proportions')
         check(result == dict(width=card.width, height=card.height, footerHeight=footer), 'Wrong style dimensions')
         check(card.crop((border, border, border+size[0], border+size[1])).tobytes() == photo.tobytes(),

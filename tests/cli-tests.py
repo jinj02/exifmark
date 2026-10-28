@@ -57,7 +57,7 @@ def check_brand_spacing(image, photo_width, footer_height, background):
 
 def layout_dimensions(photo_width, photo_height, layout, jpeg=False):
     border = math.floor(photo_width * 0.02 + 0.5) if layout != 'bottomOnly' else 0
-    footer = math.floor(photo_width * 0.08 + 0.5)
+    footer = math.floor(photo_width * (0.10 if photo_height > photo_width else 0.08) + 0.5)
     if jpeg:
         border = math.ceil(border / 8) * 8
         footer = math.ceil(max(1, footer) / 8) * 8

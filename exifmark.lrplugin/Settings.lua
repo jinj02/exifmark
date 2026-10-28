@@ -25,7 +25,7 @@ function Settings.error(properties, isMac, rendererExists)
     end
     if properties.exifmark_layout ~= nil and properties.exifmark_layout ~= 'bordered'
         and properties.exifmark_layout ~= 'bottomOnly' then
-        return '请选择三边2%留白或仅底部8%的布局。'
+        return '请选择三边2%留白或仅底部参数栏的布局。'
     end
 end
 

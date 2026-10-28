@@ -17,6 +17,7 @@ extension CardRenderer {
         let orientation = (1...8).contains(orientationValue) ? orientationValue : 1
         let swap = (5...8).contains(orientation)
         let photoWidth = Int(swap ? info.height : info.width)
+        let photoHeight = Int(swap ? info.width : info.height)
         let mcuWidth = Int(swap ? info.mcu_height : info.mcu_width)
         let mcuHeight = Int(swap ? info.mcu_width : info.mcu_height)
         func aligned(_ value: Int, to block: Int) -> Int { (value + block - 1) / block * block }
@@ -27,7 +28,8 @@ extension CardRenderer {
         let nominalBorder = Int((Double(photoWidth) * 0.02).rounded())
         let borderX = request.layout == .bordered ? aligned(nominalBorder, to: mcuWidth) : 0
         let borderY = request.layout == .bordered ? aligned(nominalBorder, to: mcuHeight) : 0
-        let footerHeight = aligned(max(1, Int((Double(photoWidth) * 0.08).rounded())), to: mcuHeight)
+        let footerRatio = photoHeight > photoWidth ? 0.10 : 0.08
+        let footerHeight = aligned(max(1, Int((Double(photoWidth) * footerRatio).rounded())), to: mcuHeight)
         let width = displayPhotoWidth + borderX * 2
         let height = displayPhotoHeight + borderY + footerHeight
         guard width <= 65500, height <= 65500, Double(width) * Double(height) <= 200_000_000 else {

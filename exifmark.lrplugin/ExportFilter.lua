@@ -23,8 +23,8 @@ local function updateStatus(properties)
     local watermarkName = properties.exifmark_watermarkStyle == 'centered' and '简洁水印' or '详细水印'
     properties.exifmark_synopsis = (borderName or '') .. ' · ' .. watermarkName
     properties.exifmark_status = reason or (properties.exifmark_layout == 'bottomOnly'
-        and '底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。保留照片压缩数据。'
-        or '上、左、右各留白2%，底部追加8%参数栏，比例按照片宽度计算，并对齐JPEG块。')
+        and '底部追加参数栏，并对齐JPEG块。保留照片压缩数据。'
+        or '上、左、右各留白照片宽度的2%，底部追加参数栏，并对齐JPEG块。')
     if not reason and properties.exifmark_theme == 'blurred' then
         properties.exifmark_status = properties.exifmark_status .. '原图模糊背景，整条水印自动选择黑字或白字。'
     end
@@ -88,8 +88,8 @@ function Filter.sectionForFilterInDialog(f, properties)
             f:popup_menu {
                 value = LrView.bind 'exifmark_layout',
                 items = {
-                    { title = '三边2%留白＋底部8%参数栏', value = 'bordered' },
-                    { title = '仅底部8%参数栏', value = 'bottomOnly' },
+                    { title = '三边2%留白＋底部参数栏', value = 'bordered' },
+                    { title = '仅底部参数栏', value = 'bottomOnly' },
                 },
                 width_in_chars = 30,
             },
