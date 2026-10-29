@@ -25,11 +25,11 @@ extension CardRenderer {
         let paddedHeight = aligned(Int(info.height), to: Int(info.mcu_height))
         let displayPhotoWidth = swap ? paddedHeight : paddedWidth
         let displayPhotoHeight = swap ? paddedWidth : paddedHeight
-        let nominalBorder = Int((Double(photoWidth) * 0.02).rounded())
-        let borderX = request.layout == .bordered ? aligned(nominalBorder, to: mcuWidth) : 0
-        let borderY = request.layout == .bordered ? aligned(nominalBorder, to: mcuHeight) : 0
-        let footerRatio = photoHeight > photoWidth ? 0.10 : 0.08
-        let footerHeight = aligned(max(1, Int((Double(photoWidth) * footerRatio).rounded())), to: mcuHeight)
+        let unit = Self.unit(photoWidth: photoWidth, photoHeight: photoHeight)
+        let nominalBorder = Self.border(unit: unit, request: request)
+        let borderX = aligned(nominalBorder, to: mcuWidth)
+        let borderY = aligned(nominalBorder, to: mcuHeight)
+        let footerHeight = aligned(Self.footerHeight(unit: unit), to: mcuHeight)
         let width = displayPhotoWidth + borderX * 2
         let height = displayPhotoHeight + borderY + footerHeight
         guard width <= 65500, height <= 65500, Double(width) * Double(height) <= 200_000_000 else {
@@ -54,11 +54,17 @@ extension CardRenderer {
         ), let pixels = context.data else { throw RenderError.allocation }
         context.concatenate(transform)
         let background = try CardBackground(source: source, theme: request.theme, width: width, height: height,
-                                            photoWidth: photoWidth, colorSpace: colorSpace)
-        background.draw(in: context, theme: request.theme)
+                                            unit: unit, colorSpace: colorSpace)
+        // Align text with the visible photo, including the padded final MCU column.
+        let footer = FooterFrame(width: CGFloat(displayPhotoWidth), height: CGFloat(footerHeight), unit: unit,
+                                 inset: Self.textInset(unit: unit, request: request), offsetX: CGFloat(borderX))
+        let ink = try footerInk(footer, request: request, properties: properties, background: background)
+        // The photo rectangle is replaced by original coefficients; only its shadow survives.
+        background.draw(in: context, theme: request.theme, adaptiveInk: ink.adaptive,
+                        photoRect: borderX > 0 ? CGRect(x: borderX, y: footerHeight, width: displayPhotoWidth,
+                                                        height: displayPhotoHeight) : nil, unit: unit)
         context.translateBy(x: CGFloat(borderX), y: 0)
-        try drawFooter(in: context, width: CGFloat(photoWidth), height: CGFloat(footerHeight), request: request,
-                       properties: properties, background: background, offsetX: CGFloat(borderX))
+        try drawFooterContents(in: context, footer: footer, request: request, properties: properties, ink: ink)
 
         let outputURL = URL(fileURLWithPath: request.output)
         let directory = outputURL.deletingLastPathComponent()

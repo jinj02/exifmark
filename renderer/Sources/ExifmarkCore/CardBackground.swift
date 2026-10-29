@@ -9,7 +9,7 @@ struct CardBackground {
     let canvas: CGRect
 
     init(source: CGImageSource, theme: Theme, width: Int, height: Int,
-         photoWidth: Int, colorSpace: CGColorSpace) throws {
+         unit: CGFloat, colorSpace: CGColorSpace) throws {
         canvas = CGRect(x: 0, y: 0, width: width, height: height)
         guard theme == .blurred else { image = nil; return }
         guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
@@ -26,8 +26,11 @@ struct CardBackground {
         let centered = sourceImage.transformed(by: CGAffineTransform(
             translationX: (extent.width - sourceImage.extent.width) / 2,
             y: (extent.height - sourceImage.extent.height) / 2))
+        // A wide radius keeps only the photo's colour field; a light saturation lift avoids a muddy wash.
         let blurred = centered.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [
-            kCIInputRadiusKey: CGFloat(photoWidth) * 0.02 * scale,
+            kCIInputRadiusKey: unit * 0.08 * scale,
+        ]).applyingFilter("CIColorControls", parameters: [
+            kCIInputSaturationKey: 1.15,
         ]).cropped(to: extent)
         let renderer = CIContext(options: [.cacheIntermediates: false])
         guard let result = renderer.createCGImage(blurred, from: extent, format: .RGBA8, colorSpace: colorSpace)
@@ -38,11 +41,27 @@ struct CardBackground {
         image = result
     }
 
-    func draw(in context: CGContext, theme: Theme) {
+    /// - Parameters:
+    ///   - adaptiveInk: Footer ink chosen for blurred cards (0 black, 1 white); tints the glass towards contrast.
+    ///   - photoRect: Photo placement on bordered cards; blurred cards cast a soft shadow around it.
+    func draw(in context: CGContext, theme: Theme, adaptiveInk: CGFloat? = nil,
+              photoRect: CGRect? = nil, unit: CGFloat = 0) {
         if let image {
             context.saveGState()
             context.interpolationQuality = .high
             context.draw(image, in: canvas)
+            if let adaptiveInk {
+                context.setFillColor(gray: adaptiveInk == 1 ? 0 : 1, alpha: adaptiveInk == 1 ? 0.25 : 0.12)
+                context.fill(canvas)
+            }
+            if let photoRect, unit > 0 {
+                // Shadow offsets live in device space; map "down" through the current orientation transform.
+                let offset = CGSize(width: 0, height: -unit * 0.006).applying(context.ctm)
+                context.setShadow(offset: offset, blur: unit * 0.035,
+                                  color: CGColor(gray: 0, alpha: adaptiveInk == 1 ? 0.45 : 0.30))
+                context.setFillColor(gray: 0, alpha: 1)
+                context.fill(photoRect)
+            }
             context.restoreGState()
         } else {
             context.setFillColor(gray: theme == .white ? 1 : 0, alpha: 1)

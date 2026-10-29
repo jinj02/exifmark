@@ -56,8 +56,9 @@ def check_brand_spacing(image, photo_width, footer_height, background):
 
 
 def layout_dimensions(photo_width, photo_height, layout, jpeg=False):
-    border = math.floor(photo_width * 0.02 + 0.5) if layout != 'bottomOnly' else 0
-    footer = math.floor(photo_width * (0.10 if photo_height > photo_width else 0.08) + 0.5)
+    short_edge = min(photo_width, photo_height)
+    border = math.floor(short_edge * 0.03 + 0.5) if layout != 'bottomOnly' else 0
+    footer = max(1, math.floor(short_edge * 0.12 + 0.5))
     if jpeg:
         border = math.ceil(border / 8) * 8
         footer = math.ceil(max(1, footer) / 8) * 8
@@ -176,7 +177,7 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                                 cameraMake='SONY', camera='超长相机型号'*50, lens='LONG镜头'*100, exposure='f/22 · 1/8000s · ISO 102400')
                 check(result.returncode == 0, result.stderr)
                 actual = ImageOps.exif_transpose(Image.open(output))
-                gap_x = border + int(expected.width * 0.55)
+                gap_x = border + int(expected.width * 0.50)
                 gap = actual.crop((gap_x, actual.height - footer + 3, gap_x + 3, actual.height - 3))
                 check(all(abs(mean-gray) < 5 for mean in ImageStat.Stat(gap).mean), 'Text or logo overflowed its region')
                 check_brand_spacing(actual, expected.width, footer, gray)
@@ -210,10 +211,11 @@ with tempfile.TemporaryDirectory(prefix='exifmark-cli-') as folder:
                         check(box is None, 'Unknown manufacturer must leave brand region empty')
                     else:
                         check(box is not None, f'Missing {brand} logo')
-                        logo_box = delta.crop((600, 0, 890, footer.height)).getbbox()
+                        logo_box = delta.crop((600, 0, 866, footer.height)).getbbox()
                         check(logo_box is not None and logo_box[2] - logo_box[0] >= 32,
                               f'{brand} was not scaled up to its display size')
-                        check(box[1] >= 20 and box[3] <= 76, f'{brand} exceeds footer height')
+                        check(box[1] >= footer.height * 0.25 and box[3] <= footer.height * 0.75,
+                              f'{brand} exceeds footer height')
                         samples[brand] = footer.crop((600, 0, 1200, footer.height)).tobytes()
             check(len(set(samples.values())) == len(brands), 'Manufacturers rendered duplicate logos')
             # TIFF Make, explicit catalog Make and model-only legacy requests.

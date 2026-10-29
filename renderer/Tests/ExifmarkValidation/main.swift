@@ -106,8 +106,9 @@ final class CardRendererTests {
                         camera: "ILCE-7M4", lens: String(repeating: "超长镜头 FE 24-70mm F2.8 GM II · ", count: 12),
                         exposure: "f/2.8 · 1/8000s · ISO 102400", capturedAt: "2026.10.27 09:41"))
                     let actual = try properties(output)
-                    let border = layout == .bordered ? Int((Double(width) * 0.02).rounded()) : 0
-                    let footer = Int((Double(width) * (height > width ? 0.10 : 0.08)).rounded())
+                    let shortEdge = Double(min(width, height))
+                    let border = layout == .bordered ? Int((shortEdge * 0.03).rounded()) : 0
+                    let footer = max(1, Int((shortEdge * 0.12).rounded()))
                     equal(result.width, width + border * 2)
                     equal(result.height, height + border + footer)
                     equal(result.footerHeight, footer)
@@ -314,8 +315,8 @@ final class CardRendererTests {
                 let output = directory.appendingPathComponent("orientation-\(orientation)-\(layout.rawValue).jpg")
                 let result = try CardRenderer().render(RenderRequest(input: input.path, output: output.path, layout: layout))
                 let bordered = layout == .bordered
-                equal(result.width, orientation >= 5 ? (bordered ? 250 : 240) : (bordered ? 332 : 320))
-                equal(result.height, orientation >= 5 ? (bordered ? 349 : 344) : (bordered ? 272 : 266))
+                equal(result.width, orientation >= 5 ? (bordered ? 254 : 240) : (bordered ? 334 : 320))
+                equal(result.height, orientation >= 5 ? (bordered ? 356 : 349) : (bordered ? 276 : 269))
                 let actual = try properties(output)
                 equal(actual[kCGImagePropertyOrientation as String] as? Int ?? 1, 1)
                 let exif = actual[kCGImagePropertyExifDictionary as String] as? [String: Any]

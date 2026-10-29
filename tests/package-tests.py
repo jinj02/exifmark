@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 import platform
 import shutil
 import subprocess
@@ -96,13 +97,29 @@ with tempfile.TemporaryDirectory(prefix='exifmark-install-') as folder:
     # Exercise every style from the relocated binary, including the JPEG coefficient path.
     request['input'] = str(directory/'installed.jpg')
     request['focalLength'] = '35mm'
+    # ImageIO can choose different chroma sampling across macOS versions.
+    # Decode its MCU dimensions independently to account for the partial final photo block.
+    with Image.open(request['input']) as photo:
+        mcu_width = max(component[1] for component in photo.layer) * 8
+        mcu_height = max(component[2] for component in photo.layer) * 8
+        photo_width = math.ceil(photo.width / mcu_width) * mcu_width
+        photo_height = math.ceil(photo.height / mcu_height) * mcu_height
+    footer = math.ceil(43 / mcu_height) * mcu_height
     for theme in ['white', 'black', 'blurred']:
         for style in ['detailed', 'centered']:
-            request.update(theme=theme, watermarkStyle=style, output=str(directory/f'{theme}-{style}.jpg'))
-            path.write_text(json.dumps(request))
-            result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
-            assert result.returncode == 0, result.stderr
-            assert Image.open(request['output']).format == 'JPEG'
+            for layout in ['bordered', 'bottomOnly']:
+                request.update(theme=theme, watermarkStyle=style, layout=layout,
+                               output=str(directory/f'{theme}-{style}-{layout}.jpg'))
+                path.write_text(json.dumps(request))
+                result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)
+                assert result.returncode == 0, result.stderr
+                border = (18 if theme == 'blurred' else 11) if layout == 'bordered' else 0
+                border_x = math.ceil(border / mcu_width) * mcu_width
+                border_y = math.ceil(border / mcu_height) * mcu_height
+                expected = (photo_width + 2*border_x, photo_height + border_y + footer)
+                with Image.open(request['output']) as card:
+                    assert card.format == 'JPEG' and card.size == expected, (theme, style, layout, card.size, expected)
+                assert json.loads(result.stdout) == dict(width=expected[0], height=expected[1], footerHeight=footer)
     shutil.rmtree(binary.parent/'ExifmarkRenderer_ExifmarkCore.bundle')
     request['output'] = str(directory/'missing-logo.jpg'); path.write_text(json.dumps(request))
     result = subprocess.run([str(binary), '--request', str(path)], capture_output=True, text=True)

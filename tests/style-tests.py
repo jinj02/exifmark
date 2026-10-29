@@ -3,6 +3,7 @@
 import itertools
 import json
 import math
+from collections import Counter
 from pathlib import Path
 import subprocess
 import tempfile
@@ -43,17 +44,21 @@ def footer_mask(card, footer, gray):
 with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
     folder = Path(temporary)
     source = folder / 'source.tif'
-    # All 12 combinations, portrait/landscape and a tiny canvas; TIFF preserves exact photo pixels.
+    # All 12 combinations, including square, panoramic, rounding and one-pixel edge cases.
+    # TIFF preserves exact photo pixels, independently of the background and type changes.
     for size, theme, style, layout in itertools.product(
-            [(1200, 800), (800, 1200), (17, 11)], ['white', 'black', 'blurred'],
+            [(1200, 800), (800, 1200), (800, 800), (1600, 400), (667, 1000), (17, 11), (1, 1)],
+            ['white', 'black', 'blurred'],
             ['detailed', 'centered'], ['bordered', 'bottomOnly']):
         photo = Image.new('RGB', size, (65, 115, 155))
         photo.paste((190, 145, 75), (size[0]//2, 0, size[0], size[1]//2))
         photo.save(source)
         card, result, _ = render(folder, source, theme=theme, watermarkStyle=style, layout=layout)
-        border = round(size[0]*0.02) if layout == 'bordered' else 0
-        footer = math.floor(size[0]*(0.10 if size[1] > size[0] else 0.08)+0.5)
-        check(card.size == (size[0]+2*border, size[1]+border+footer), 'Style changed canvas proportions')
+        short_edge = min(size)
+        border = math.floor(short_edge*(0.05 if theme == 'blurred' else 0.03)+0.5) if layout == 'bordered' else 0
+        footer = max(1, math.floor(short_edge*0.12+0.5))
+        check(card.size == (size[0]+2*border, size[1]+border+footer),
+              f'Wrong short-edge proportions: {size}, {theme}, {style}, {layout}')
         check(result == dict(width=card.width, height=card.height, footerHeight=footer), 'Wrong style dimensions')
         check(card.crop((border, border, border+size[0], border+size[1])).tobytes() == photo.tobytes(),
               'Style changed sharp photo pixels')
@@ -69,16 +74,53 @@ with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
                     check(box[0] >= border+size[0]*0.1-2 and box[2] <= border+size[0]*0.9+2,
                           'Centered row exceeded 80% width')
 
-    # Pure black or white ink throughout the footer, including the logo and detailed divider.
+    # Equal short edges keep the same type scale across aspect ratios and frame layouts.
+    # Use short labels so automatic fitting cannot hide an incorrect font scale.
+    for theme, gray in [('white', 255), ('black', 0)]:
+        reference = None
+        for size, layout in itertools.product([(1200, 800), (800, 1200), (1600, 800)],
+                                               ['bordered', 'bottomOnly']):
+            Image.new('RGB', size, (65, 115, 155)).save(source)
+            card, result, _ = render(folder, source, theme=theme, layout=layout,
+                                       cameraCustomName='Test Z 8', lens='Prime 50mm',
+                                       exposure='f/4 · ISO 100', capturedAt='2026.10.28')
+            check(result['footerHeight'] == 96, 'Aspect ratio changed the footer scale')
+            border = 24 if layout == 'bordered' else 0
+            inset = 0 if layout == 'bordered' else 24
+            mask = footer_mask(card, 96, gray)
+            left = mask.crop((border+inset, 0, border+inset+250, 96))
+            box = left.getbbox()
+            check(box is not None and 0 <= box[0] <= 3, 'Detailed text lost photo-edge/inset alignment')
+            if reference is None:
+                reference = left.tobytes()
+            check(left.tobytes() == reference, 'Equal short edges rendered different text sizes or row spacing')
+            right = mask.crop((card.width//2, 0, card.width, 96)).getbbox()
+            check(right is not None and abs(card.width//2+right[2]-(card.width-border-inset)) <= 3,
+                  'Detailed parameters lost right-edge alignment')
+            if inset:
+                check(mask.crop((0, 0, inset, 96)).getbbox() is None,
+                      'Bottom-only footer lost its left breathing room')
+                check(mask.crop((card.width-inset, 0, card.width, 96)).getbbox() is None,
+                      'Bottom-only footer lost its right breathing room')
+
+    # Glass tint improves contrast; primary ink stays opaque and secondary text stays softer.
     for gray, style in itertools.product([30, 70, 190, 235], ['detailed', 'centered']):
         Image.new('RGB', (1200, 800), (gray,)*3).save(source)
         card, result, _ = render(folder, source, theme='blurred', watermarkStyle=style)
         band = card.crop((0, card.height-result['footerHeight'], card.width, card.height))
         low, high = band.convert('L').getextrema()
+        background = round(gray*0.75) if gray <= 70 else round(gray*0.88+255*0.12)
+        check(abs(band.getpixel((card.width//2, band.height-1))[0]-background) <= 2,
+              'Glass tint did not follow the selected ink')
+        counts = Counter(band.convert('L').tobytes())
+        secondary = round(background*0.22+255*0.78) if gray <= 70 else round(background*0.32)
+        check(sum(count for value, count in counts.items() if abs(value-secondary) <= 2) > 10,
+              'Missing translucent secondary ink')
         if gray <= 70:
-            check(high >= 250 and low >= gray-2, 'Dark background must use uniformly white ink')
+            check(high >= 250 and low >= background*0.5-2,
+                  f'Dark glass lost white ink or its background: {gray}, {style}, {low}, {high}')
         else:
-            check(low <= 5 and high <= gray+2, 'Bright background must use uniformly black ink')
+            check(low <= 5 and high <= background+2, 'Bright glass lost black ink or its background')
 
     # Sample the background underneath the watermark rather than the brighter main photo.
     photo = Image.new('RGB', (1200, 800), (245,)*3)
@@ -91,21 +133,19 @@ with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
     # Uneven backgrounds still use one shared ink color across both rows and both sides.
     photo = Image.new('RGB', (1200, 800), (210,)*3)
     photo.paste((40,)*3, (600, 0, 1200, 800)); photo.save(source)
-    empty, result, _ = render(folder, source, theme='blurred', cameraMake='', camera='', lens='',
-                               focalLength='', exposure='', capturedAt='')
     for style in ['centered', 'detailed']:
-        card, _, _ = render(folder, source, theme='blurred', watermarkStyle=style)
-        actual = card.crop((0, card.height-result['footerHeight'], card.width, card.height)).convert('L')
-        background = empty.crop((0, empty.height-result['footerHeight'], empty.width, empty.height)).convert('L')
-        differences = [a-b for a, b in zip(actual.tobytes(), background.tobytes())]
-        check(max(differences) <= 1 or min(differences) >= -1, 'Mixed background used inconsistent ink colors')
-        check(max(differences)-min(differences) > 20, 'Mixed background lost the watermark')
+        card, result, _ = render(folder, source, theme='blurred', watermarkStyle=style)
+        band = card.crop((40, card.height-result['footerHeight'], card.width-40, card.height)).convert('L')
+        # Opposite opaque extrema would reveal a per-row/per-region switch in foreground color.
+        counts = Counter(band.tobytes())
+        black, white = sum(counts[v] for v in range(6)), sum(counts[v] for v in range(250, 256))
+        check((black > 10) != (white > 10), 'Mixed background used inconsistent or missing primary ink')
 
     # Exercise thumbnail downsampling on a photo larger than the background's 2048px limit.
     large = photo.resize((3200, 2400)); large.save(source)
     card, _, _ = render(folder, source, theme='blurred', watermarkStyle='centered')
-    check(card.size == (3328, 2720), 'Large background changed dimensions')
-    check(card.crop((64, 64, 3264, 2464)).tobytes() == large.tobytes(), 'Large blurred background changed the photo')
+    check(card.size == (3440, 2808), 'Large background changed dimensions')
+    check(card.crop((120, 120, 3320, 2520)).tobytes() == large.tobytes(), 'Large blurred background changed the photo')
 
     # Centered content omits lens/date, and independently displays focal length and camera naming choice.
     Image.new('RGB', (1200, 800), (90, 120, 150)).save(source)
@@ -153,16 +193,17 @@ with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
     check(max(abs(a[0]-b[0]) for a, b in zip(ramp, ramp[1:])) < 12, 'Background has an unblurred seam')
 
     # Compare bitmap and coefficient paths in every orientation (dimensions align exactly with 4:4:4 MCUs).
-    photo = photo.resize((800, 400))
+    photo = photo.resize((1600, 800))
     for orientation in range(1, 9):
         exif = Image.Exif(); exif[274] = orientation
         jpeg = folder / 'oriented.jpg'; photo.save(jpeg, quality=95, subsampling=0, exif=exif)
         card, _, _ = render(folder, jpeg, name='oriented-output.jpg', theme='blurred', watermarkStyle='centered')
         bitmap, _, _ = render(folder, jpeg, theme='blurred', watermarkStyle='centered')
         check(card.size == bitmap.size, 'Bitmap and JPEG geometry disagree')
-        strip = (0, 0, card.width, round(card.width/1.04*0.02))
-        delta = ImageStat.Stat(ImageChops.difference(card.crop(strip), bitmap.crop(strip)))
-        check(max(delta.mean) < 6, f'Background orientation differs between render paths: {orientation}')
+        for strip in [(0, 0, card.width, 40), (0, card.height-96, card.width, card.height),
+                      (0, 40, 40, card.height-96), (card.width-40, 40, card.width, card.height-96)]:
+            delta = ImageStat.Stat(ImageChops.difference(card.crop(strip), bitmap.crop(strip)))
+            check(max(delta.mean) < 6, f'Background/footer orientation differs between render paths: {orientation}')
 
     # Inspect original quantization tables, sampling, and EVERY DCT coefficient, including partial edge blocks.
     inspector = folder / 'jpeg-coefficients'
@@ -180,9 +221,11 @@ with tempfile.TemporaryDirectory(prefix='exifmark-styles-') as temporary:
         _, result, output = render(folder, jpeg, name='coefficients-output.jpg', theme='blurred',
                                    watermarkStyle=style, layout=layout)
         block = 8 if sampling == 0 else 16
-        photo_width = 299 if orientation >= 5 else 411
-        border = math.ceil(math.floor(photo_width*0.02+0.5)/block)*block if layout == 'bordered' else 0
-        footer = result['footerHeight']
+        border = math.ceil(math.floor(299*0.05+0.5)/block)*block if layout == 'bordered' else 0
+        footer = math.ceil(math.floor(299*0.12+0.5)/block)*block
+        oriented = (304, 416) if orientation >= 5 else (416, 304)
+        check(result == dict(width=oriented[0]+2*border, height=oriented[1]+border+footer,
+                             footerHeight=footer), 'Wrong partial-MCU JPEG dimensions')
         if orientation >= 5:
             offset = (border if orientation in [5, 6] else footer, border)
         else:
