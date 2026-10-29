@@ -2,6 +2,21 @@
 
 Release notes are generated from Git commit history by the version bump command.
 
+## [0.3.0] - 2026-10-29
+
+### Features
+
+- \[feat\] Added independent border and watermark styles ([ede66b3](https://github.com/jinj02/exifmark/commit/ede66b3716042607634d9d99f33c2cdf80a61788))
+- \[feat\] Refine watermark proportions and typography with regression coverage ([84b4b53](https://github.com/jinj02/exifmark/commit/84b4b539881718fe5911f9adb8b6cf6af77f7de7))
+
+### Bug Fixes
+
+- \[fix\] Increase portrait footer height and simplify Lightroom labels ([7351fd9](https://github.com/jinj02/exifmark/commit/7351fd98d793716454948213ba1c254f93d4bc24))
+
+### Other Changes
+
+- \[docs\] Update README and add rendered camera detail examples ([7ac99ea](https://github.com/jinj02/exifmark/commit/7ac99eaa6850371625fcd094e1b13facc4e1e36b))
+
 ## [0.2.0] - 2026-10-28
 
 ### Features
